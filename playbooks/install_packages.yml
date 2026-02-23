@@ -1,0 +1,8 @@
+---
+- hosts: rundeck.example.com
+  tasks:
+    - name: Package Installation
+      apt:
+        name:
+          - openjdk-11-jre-headless
+        state: latest
