@@ -1,8 +1,9 @@
 ---
-- hosts: rundeck
+- name: Package Installation
+  hosts: rundeck
   tasks:
-    - name: Package Installation
-      apt:
+    - name: Install openjdk-25
+      ansible.builtin.apt:
         name:
           - openjdk-25-jre-headless
         state: latest
