@@ -1,5 +1,5 @@
 ---
-- hosts: rundeck.example.com
+- hosts: rundeck
   tasks:
     - name: Package Installation
       apt:
