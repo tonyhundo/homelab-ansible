@@ -1,6 +1,7 @@
 ---
 - name: Package Installation
   hosts: rundeck
+  become: true
   tasks:
     - name: Install openjdk-25
       ansible.builtin.apt:
