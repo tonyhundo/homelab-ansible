@@ -1,0 +1,11 @@
+---
+- name: Package Installations
+  hosts: homelab
+  become: true
+  tasks:
+    - name: Install default pkgs
+      ansible.builtin.apt:
+        name:
+          - syslog-ng
+          - htop
+        state: latest
