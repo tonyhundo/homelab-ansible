@@ -1,3 +1,7 @@
 [homelab]
 fiordland.example.com
 emperor.example.com
+pihole.example.com
+
+[pihole]
+pihole.example.com
