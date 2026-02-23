@@ -4,5 +4,5 @@
     - name: Package Installation
       apt:
         name:
-          - openjdk-11-jre-headless
+          - openjdk-25-jre-headless
         state: latest
