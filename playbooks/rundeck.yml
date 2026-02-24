@@ -3,8 +3,8 @@
   hosts: rundeck
   become: true
   tasks:
-    - name: Install openjdk-25
+    - name: Install openjdk-17
       ansible.builtin.apt:
         name:
-          - openjdk-25-jre-headless
+          - openjdk-17-jre-headless
         state: latest
