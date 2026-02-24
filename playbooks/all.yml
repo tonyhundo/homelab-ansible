@@ -8,4 +8,5 @@
         name:
           - syslog-ng
           - htop
+          - net-tools
         state: latest
