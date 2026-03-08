@@ -1,8 +1,6 @@
-[homelab]
+[desktop]
+emperor.theseammals.com
 fiordland.example.com
-emperor.example.com
-pihole.example.com
-rundeck.example.com
 
 [pihole]
 pihole.example.com
@@ -10,3 +8,5 @@ pihole.example.com
 [rundeck]
 rundeck.example.com
 
+[grafana]
+grafana.example.com
