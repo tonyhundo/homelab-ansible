@@ -96,3 +96,5 @@
       service:
         name: sshd
         state: restarted
+
+- import_playbook: node_exporter.yml
