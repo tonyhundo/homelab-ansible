@@ -1,0 +1,23 @@
+---
+- name: Update Pi-hole DNS record
+  hosts: pihole
+  become: true
+
+  tasks:
+    - name: Remove existing DNS entry for hostname
+      ansible.builtin.lineinfile:
+        path: /etc/pihole/custom.list
+        regexp: '\s+{{ dns_hostname | regex_escape }}$'
+        state: absent
+
+    - name: Add DNS entry for hostname
+      ansible.builtin.lineinfile:
+        path: /etc/pihole/custom.list
+        line: "{{ dns_ip }} {{ dns_hostname }}"
+        state: present
+      notify: Restart pihole DNS
+
+  handlers:
+    - name: Restart pihole DNS
+      ansible.builtin.command: pihole restartdns
+      changed_when: true

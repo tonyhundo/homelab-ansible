@@ -1,12 +1,9 @@
-[desktop]
-emperor.theseammals.com
-fiordland.example.com
+#[desktop]
+#emperor.theseammals.com
+#fiordland.example.com
 
 [pihole]
 pihole.example.com
-
-[rundeck]
-rundeck.example.com
 
 [grafana]
 grafana.example.com ansible_host=192.0.2.100
