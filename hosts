@@ -10,3 +10,6 @@ rundeck.example.com
 
 [grafana]
 grafana.example.com
+
+[prometheus]
+prometheus.example.com
