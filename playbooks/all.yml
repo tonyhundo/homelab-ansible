@@ -35,12 +35,12 @@
 
   tasks:
     - name: Ensure sudo group exists
-      group:
+      ansible.builtin.group:
         name: sudo
         state: present
 
     - name: Create users
-      user:
+      ansible.builtin.user:
         name: "{{ item.name }}"
         shell: "{{ item.shell }}"
         groups: "{{ item.groups }}"
@@ -50,7 +50,7 @@
       loop: "{{ users }}"
 
     - name: Create .ssh directory for each user
-      file:
+      ansible.builtin.file:
         path: "/home/{{ item.name }}/.ssh"
         state: directory
         owner: "{{ item.name }}"
@@ -59,14 +59,14 @@
       loop: "{{ users }}"
 
     - name: Add SSH authorized keys
-      authorized_key:
+      ansible.posix.authorized_key:
         user: "{{ item.name }}"
         key: "{{ item.ssh_key | join('\n') }}"
         state: present
       loop: "{{ users }}"
 
     - name: Grant passwordless sudo
-      copy:
+      ansible.builtin.copy:
         dest: "/etc/sudoers.d/{{ item.name }}"
         content: "{{ item.name }} ALL=(ALL) NOPASSWD:ALL\n"
         owner: root
@@ -76,15 +76,15 @@
       loop: "{{ users }}"
 
     - name: Ensure sshd allows pubkey auth
-      lineinfile:
+      ansible.builtin.lineinfile:
         path: /etc/ssh/sshd_config
         regexp: "^#?PubkeyAuthentication"
         line: "PubkeyAuthentication yes"
         state: present
       notify: Restart sshd
 
-    - name: Disable password authentication (optional, recommended)
-      lineinfile:
+    - name: Disable password authentication
+      ansible.builtin.lineinfile:
         path: /etc/ssh/sshd_config
         regexp: "^#?PasswordAuthentication"
         line: "PasswordAuthentication no"
@@ -93,7 +93,7 @@
 
   handlers:
     - name: Restart sshd
-      service:
+      ansible.builtin.service:
         name: sshd
         state: restarted
 

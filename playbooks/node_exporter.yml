@@ -7,7 +7,7 @@
 
   tasks:
     - name: Create node_exporter system user
-      user:
+      ansible.builtin.user:
         name: node_exporter
         system: true
         shell: /usr/sbin/nologin
@@ -20,13 +20,13 @@
         mode: '0644'
 
     - name: Extract node_exporter
-      unarchive:
+      ansible.builtin.unarchive:
         src: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
         dest: /tmp/
         remote_src: true
 
     - name: Install node_exporter binary
-      copy:
+      ansible.builtin.copy:
         src: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
         dest: /usr/local/bin/node_exporter
         owner: root
@@ -35,7 +35,7 @@
         remote_src: true
 
     - name: Create node_exporter systemd service
-      copy:
+      ansible.builtin.copy:
         dest: /etc/systemd/system/node_exporter.service
         owner: root
         group: root
@@ -57,7 +57,7 @@
       notify: Restart node_exporter
 
     - name: Enable and start node_exporter
-      systemd:
+      ansible.builtin.systemd:
         name: node_exporter
         enabled: true
         state: started
@@ -65,6 +65,6 @@
 
   handlers:
     - name: Restart node_exporter
-      systemd:
+      ansible.builtin.systemd:
         name: node_exporter
         state: restarted

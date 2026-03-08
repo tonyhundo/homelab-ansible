@@ -28,7 +28,7 @@
         update_cache: true
 
     - name: Configure Grafana datasource for Prometheus
-      copy:
+      ansible.builtin.copy:
         dest: /etc/grafana/provisioning/datasources/prometheus.yml
         owner: root
         group: grafana
@@ -45,7 +45,7 @@
       notify: Restart grafana
 
     - name: Enable and start grafana
-      systemd:
+      ansible.builtin.systemd:
         name: grafana-server
         enabled: true
         state: started
@@ -53,6 +53,6 @@
 
   handlers:
     - name: Restart grafana
-      systemd:
+      ansible.builtin.systemd:
         name: grafana-server
         state: restarted
