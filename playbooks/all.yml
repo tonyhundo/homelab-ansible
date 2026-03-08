@@ -8,7 +8,14 @@
         name:
           - htop
           - net-tools
+          - qemu-guest-agent
         state: latest
+
+    - name: Enable and start qemu-guest-agent
+      ansible.builtin.systemd:
+        name: qemu-guest-agent
+        enabled: true
+        state: started
 
 - name: Configure users with sudo access
   hosts: all
