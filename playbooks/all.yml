@@ -6,7 +6,6 @@
     - name: Install default pkgs
       ansible.builtin.apt:
         name:
-          - syslog-ng
           - htop
           - net-tools
         state: latest
