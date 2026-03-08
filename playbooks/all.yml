@@ -1,6 +1,6 @@
 ---
 - name: Package Installations
-  hosts: homelab
+  hosts: all
   become: true
   tasks:
     - name: Install default pkgs
@@ -10,3 +10,90 @@
           - htop
           - net-tools
         state: latest
+
+- name: Configure users with sudo access
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    users:
+      - name: admin
+        uid: 1000
+        shell: /bin/bash
+        groups: sudo
+        sudo: ['ALL=(ALL) NOPASSWD:ALL']
+        ssh_key:
+          - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDJ+dgm8xiWng1P/z3s0OaPQDJCvyhGrgYAOLYlWTb/CErzteCHZx/0k8IKH8FvVVlpHRWSQ9s9AFBn8wn1iv+TaRt1VkCoEhB9E1+8rhoGBvlqxJ5sT9NL8ts6s2ku6qgdqq4noUFrA67jEZBtK0NdhojC20TwcbwrS9llRzG/7iJWw5DeAFj/NcKvZedViO8bmYzbjbPg90Td+7IlRSz5qJyEqjrl9Ga2T4IGiWUjMralSTpvw6z/WOR9ovaLm5Eu8aJdnhj3w+kEjPTvdSREeTzwMXzIF9sxww5FymgiZd3dKFr+N/NVx5Go/faYf8Saz0notaHCsziMc8hc+tR50d/kb+pJzLuMGPe/xdpM+mQkM+FtFlCeNV6H54RBceC8GWCbdi+7CJhb17ZOpWQFNpyqAlrmx302TQLE2Hts4QCw56oes/2y3BeCCiP863FaCHtAjRMj/uExpI5EneSSbpNF7HJl1ShGn1/xQQUcJSWNqdq89PNljRU1PWINBcat4rybi6FqpO+SS6Eoc3wFUSW9dgXjip9Ur+InXpDoqYL1S1h5hzfFVI798j62uzj//uRSyBlLMAWArWr7lKdJDCDbS1MLyslD/tcsi+DECnbGlXGJ9H/NUTfR4aq6tCXdtq/i4U/E7Gg2Rsx756cmiql+WpqiLABYZ9pF4GXuxw== admin@emperor
+
+      - name: ansible                                   
+        uid: 1001
+        shell: /bin/bash
+        groups: sudo                                         
+        sudo: ['ALL=(ALL) NOPASSWD:ALL']                     
+        ssh_key:                                 
+          - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDKYGR16I7oBHzNYmUlgF0l01I9N4bVU46zKeXmlo/B2F0n/wWPwUwGCqPWCHrdpXMDSq+FagnfQ9jJMD3+sGQ9k9zFMotLYXfWZeSDm1d7VH/g/traB1kRQw1OWfH2bjsT8sQCCoCfw8l6cUih8GcaQon4q561AovDb0y3K7wsHAjkTotDBkmnGTK7o8ReIni6oBlwfF3jKflsA3aKXRL7tO6YfNMG4+kYAn+UoY5eHTST2ftWCF1c/8XFxXBD/vuI59LvnUNBSuRCeyjIL188XJCtWfXDOuIq0SLxKW6Vvqj08lMqwJICD4MjzDdPkHsUwpo8tkxcEB8OVF2LRvZOV6V52IMngQ2wM7nkNNEPluv4fVcc3cXVG0vAhibZWJNeZGqypZAUV+EEjGre+UClV6uv5/4s+RDTu71uocOAJPkqp9G5zj6jrtQf5NMzwojqalmew1lZYAnnPpymNxx3s+yyyn5MDSqD30Y7/QqEypMSOWa8VQvonnkzx+nYCX6kHJ4mwjilnPusj7BkOVFLIEhCjmB0TOaPhiDB1cWdVYnLbLb067DnNiq4mJsrxsT0Ue0D9GEYGRcKwFy7OPcN9EiIJerAhRfBPRrkOm58MJUHxf8GbE+d8n3RYuTYX+GRSFbE1HmIwR0AYmlbsNVoTs8RDPS5fJNfdXJDaUmlpQ== ansible@ansible.example.com
+
+  tasks:
+    - name: Ensure sudo group exists
+      group:
+        name: sudo
+        state: present
+
+    - name: Create users
+      user:
+        name: "{{ item.name }}"
+        shell: "{{ item.shell }}"
+        groups: "{{ item.groups }}"
+        append: true
+        create_home: true
+        state: present
+      loop: "{{ users }}"
+
+    - name: Create .ssh directory for each user
+      file:
+        path: "/home/{{ item.name }}/.ssh"
+        state: directory
+        owner: "{{ item.name }}"
+        group: "{{ item.name }}"
+        mode: "0700"
+      loop: "{{ users }}"
+
+    - name: Add SSH authorized keys
+      authorized_key:
+        user: "{{ item.name }}"
+        key: "{{ item.ssh_key | join('\n') }}"
+        state: present
+      loop: "{{ users }}"
+
+    - name: Grant passwordless sudo
+      copy:
+        dest: "/etc/sudoers.d/{{ item.name }}"
+        content: "{{ item.name }} ALL=(ALL) NOPASSWD:ALL\n"
+        owner: root
+        group: root
+        mode: "0440"
+        validate: "visudo -cf %s"
+      loop: "{{ users }}"
+
+    - name: Ensure sshd allows pubkey auth
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PubkeyAuthentication"
+        line: "PubkeyAuthentication yes"
+        state: present
+      notify: Restart sshd
+
+    - name: Disable password authentication (optional, recommended)
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PasswordAuthentication"
+        line: "PasswordAuthentication no"
+        state: present
+      notify: Restart sshd
+
+  handlers:
+    - name: Restart sshd
+      service:
+        name: sshd
+        state: restarted
