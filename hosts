@@ -3,7 +3,7 @@
 #fiordland.example.com
 
 [pihole]
-pihole.example.com
+pihole.example.com ansible_host=192.0.2.15
 
 [grafana]
 grafana.example.com ansible_host=192.0.2.100

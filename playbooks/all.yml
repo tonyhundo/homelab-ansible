@@ -17,6 +17,17 @@
         enabled: true
         state: started
 
+- name: Set root password
+  hosts: all
+  become: true
+  vars_files:
+    - vault.yml
+  tasks:
+    - name: Set root password
+      ansible.builtin.user:
+        name: root
+        password: "{{ root_password | password_hash('sha512') }}"
+
 - name: Configure users with sudo access
   hosts: all
   become: true
