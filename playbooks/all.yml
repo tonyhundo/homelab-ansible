@@ -1,6 +1,6 @@
 ---
 - name: Package Installations
-  hosts: all
+  hosts: vms
   become: true
   tasks:
     - name: Install default pkgs
@@ -23,10 +23,40 @@
   vars_files:
     - vault.yml
   tasks:
+    - name: Get current root password hash
+      ansible.builtin.getent:
+        database: shadow
+        key: root
+
+    - name: Extract salt from current hash
+      ansible.builtin.set_fact:
+        root_salt: "{{ getent_shadow['root'][0].split('$')[2] }}"
+      when: getent_shadow['root'][0] is match('^\$6\$')
+      no_log: true
+
+    - name: Generate expected hash with current salt
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - passwd
+          - -6
+          - -salt
+          - "{{ root_salt }}"
+          - "{{ root_password }}"
+      register: root_expected
+      changed_when: false
+      when: root_salt is defined
+      no_log: true
+
     - name: Set root password
-      ansible.builtin.user:
-        name: root
-        password: "{{ root_password | password_hash('sha512') }}"
+      ansible.builtin.command:
+        argv:
+          - chpasswd
+          - -c
+          - SHA512
+        stdin: "root:{{ root_password }}"
+      changed_when: root_expected is skipped or getent_shadow['root'][0] != root_expected.stdout
+      no_log: true
 
 - name: Configure users with sudo access
   hosts: all
