@@ -17,3 +17,6 @@ prometheus.example.com ansible_host=192.0.2.99
 
 [gitea]
 gitea.example.com
+
+[mariadb]
+mariadb.example.com

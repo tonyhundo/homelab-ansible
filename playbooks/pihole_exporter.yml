@@ -37,7 +37,7 @@
           User=pihole_exporter
           Group=pihole_exporter
           Type=simple
-          Environment=PIHOLE_HOSTNAME=127.0.0.1
+          Environment=PIHOLE_HOSTNAME=pihole.example.com
           Environment=PIHOLE_PORT=80
           Environment=PIHOLE_PROTOCOL=http
           ExecStart=/usr/local/bin/pihole_exporter
