@@ -2,6 +2,10 @@
 #emperor.theseammals.com
 #fiordland.example.com
 
+[vms]
+grafana.example.com ansible_host=192.0.2.100
+prometheus.example.com ansible_host=192.0.2.99
+
 [pihole]
 pihole.example.com ansible_host=192.0.2.15
 
@@ -10,3 +14,6 @@ grafana.example.com ansible_host=192.0.2.100
 
 [prometheus]
 prometheus.example.com ansible_host=192.0.2.99
+
+[gitea]
+gitea.example.com
