@@ -81,6 +81,20 @@
           {% for host in groups['all'] %}
                     - '{{ hostvars[host]["ansible_host"] | default(host) }}:9100'
           {% endfor %}
+
+            - job_name: 'pihole'
+              static_configs:
+                - targets:
+          {% for host in groups['pihole'] %}
+                    - '{{ hostvars[host]["ansible_host"] | default(host) }}:9617'
+          {% endfor %}
+
+            - job_name: 'gitea'
+              static_configs:
+                - targets:
+          {% for host in groups['gitea'] %}
+                    - '{{ hostvars[host]["ansible_host"] | default(host) }}:3000'
+          {% endfor %}
       notify: Restart prometheus
 
     - name: Create prometheus systemd service

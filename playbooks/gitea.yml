@@ -1,0 +1,180 @@
+---
+- name: Install Gitea
+  hosts: all
+  become: true
+
+  vars:
+    gitea_version: "1.25.5"
+    gitea_domain: "{{ inventory_hostname }}"
+    gitea_http_port: 3000
+
+  tasks:
+    - name: Install prerequisites
+      ansible.builtin.apt:
+        name:
+          - git
+          - sqlite3
+        state: present
+        update_cache: true
+
+    - name: Create git system user
+      ansible.builtin.user:
+        name: gitea
+        system: true
+        shell: /bin/bash
+        home: /home/gitea
+        create_home: true
+
+    - name: Create SSH directory for gitea user
+      ansible.builtin.file:
+        path: /home/gitea/.ssh
+        state: directory
+        owner: gitea
+        group: gitea
+        mode: '0700'
+
+    - name: Create Gitea directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: gitea
+        group: gitea
+        mode: '0750'
+      loop:
+        - /etc/gitea
+        - /var/lib/gitea
+        - /var/lib/gitea/data
+        - /var/lib/gitea/log
+        - /var/lib/gitea/repos
+
+    - name: Download Gitea binary
+      ansible.builtin.get_url:
+        url: "https://dl.gitea.com/gitea/{{ gitea_version }}/gitea-{{ gitea_version }}-linux-amd64"
+        dest: /usr/local/bin/gitea
+        mode: '0755'
+      notify: Restart gitea
+
+    - name: Configure Gitea
+      ansible.builtin.copy:
+        dest: /etc/gitea/app.ini
+        owner: gitea
+        group: gitea
+        mode: '0640'
+        content: |
+          APP_NAME = Gitea: Git with a cup of tea
+            RUN_USER = gitea
+            WORK_PATH = /var/lib/gitea
+            RUN_MODE = prod
+
+            [database]
+            DB_TYPE = mysql
+            HOST = 192.0.2.240:3306
+            NAME = gitea
+            USER = gitea
+            PASSWD = ***REMOVED-GITEA-DB-PW***
+            SCHEMA = 
+            SSL_MODE = disable
+            PATH = /var/lib/gitea/data/gitea.db
+            LOG_SQL = false
+
+            [repository]
+            ROOT = /var/lib/gitea/data/gitea-repositories
+
+            [server]
+            SSH_DOMAIN = gitea.example.com
+            DOMAIN = gitea.example.com
+            HTTP_PORT = 3000
+            ROOT_URL = http://gitea.example.com:3000/
+            APP_DATA_PATH = /var/lib/gitea/data
+            DISABLE_SSH = false
+            SSH_PORT = 22
+            LFS_START_SERVER = true
+            LFS_JWT_SECRET = ***REMOVED-GITEA-LFS-JWT-SECRET***
+            OFFLINE_MODE = true
+
+            [lfs]
+            PATH = /var/lib/gitea/data/lfs
+
+            [mailer]
+            ENABLED = false
+
+            [service]
+            REGISTER_EMAIL_CONFIRM = false
+            ENABLE_NOTIFY_MAIL = false
+            DISABLE_REGISTRATION = false
+            ALLOW_ONLY_EXTERNAL_REGISTRATION = false
+            ENABLE_CAPTCHA = false
+            REQUIRE_SIGNIN_VIEW = false
+            DEFAULT_KEEP_EMAIL_PRIVATE = false
+            DEFAULT_ALLOW_CREATE_ORGANIZATION = true
+            DEFAULT_ENABLE_TIMETRACKING = true
+            NO_REPLY_ADDRESS = noreply.localhost
+
+            [openid]
+            ENABLE_OPENID_SIGNIN = true
+            ENABLE_OPENID_SIGNUP = true
+
+            [cron.update_checker]
+            ENABLED = false
+
+            [session]
+            PROVIDER = file
+
+            [log]
+            MODE = console
+            LEVEL = info
+            ROOT_PATH = /var/lib/gitea/log
+
+            [repository.pull-request]
+            DEFAULT_MERGE_STYLE = merge
+
+            [repository.signing]
+            DEFAULT_TRUST_MODEL = committer
+
+            [security]
+            INSTALL_LOCK = true
+            INTERNAL_TOKEN = ***REMOVED-GITEA-INTERNAL-TOKEN***
+            PASSWORD_HASH_ALGO = pbkdf2
+
+            [oauth2]
+            JWT_SECRET = ***REMOVED-GITEA-JWT-SECRET***
+
+            [metrics]
+            ENABLED = true
+      notify: Restart gitea
+
+    - name: Create Gitea systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/gitea.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Gitea (Git with a cup of tea)
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=gitea
+          Group=gitea
+          WorkingDirectory=/var/lib/gitea
+          ExecStart=/usr/local/bin/gitea web --config /etc/gitea/app.ini
+          Restart=always
+          Environment=USER=gitea HOME=/home/gitea GITEA_WORK_DIR=/var/lib/gitea
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart gitea
+
+    - name: Enable and start Gitea
+      ansible.builtin.systemd:
+        name: gitea
+        enabled: true
+        state: started
+        daemon_reload: true
+
+  handlers:
+    - name: Restart gitea
+      ansible.builtin.systemd:
+        name: gitea
+        state: restarted
+        daemon_reload: true

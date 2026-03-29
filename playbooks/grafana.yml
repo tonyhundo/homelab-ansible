@@ -36,8 +36,9 @@
         content: |
           apiVersion: 1
           datasources:
-            - name: Prometheus
+            - name: prometheus
               type: prometheus
+              uid: ds_prometheus
               access: proxy
               url: http://prometheus.example.com:9090
               isDefault: true

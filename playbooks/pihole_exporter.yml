@@ -1,0 +1,61 @@
+---
+- name: Install Pi-hole Exporter
+  hosts: all
+  become: true
+  vars:
+    pihole_exporter_version: "1.2.0"
+
+  tasks:
+    - name: Create pihole_exporter system user
+      ansible.builtin.user:
+        name: pihole_exporter
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Download pihole_exporter binary
+      ansible.builtin.get_url:
+        url: "https://github.com/eko/pihole-exporter/releases/download/v{{ pihole_exporter_version }}/pihole_exporter-linux-amd64"
+        dest: /usr/local/bin/pihole_exporter
+        owner: root
+        group: root
+        mode: '0755'
+      notify: Restart pihole_exporter
+
+    - name: Create pihole_exporter systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/pihole_exporter.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Pi-hole Exporter
+          After=network.target
+
+          [Service]
+          User=pihole_exporter
+          Group=pihole_exporter
+          Type=simple
+          Environment=PIHOLE_HOSTNAME=127.0.0.1
+          Environment=PIHOLE_PORT=80
+          Environment=PIHOLE_PROTOCOL=http
+          ExecStart=/usr/local/bin/pihole_exporter
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart pihole_exporter
+
+    - name: Enable and start pihole_exporter
+      ansible.builtin.systemd:
+        name: pihole_exporter
+        enabled: true
+        state: started
+        daemon_reload: true
+
+  handlers:
+    - name: Restart pihole_exporter
+      ansible.builtin.systemd:
+        name: pihole_exporter
+        state: restarted
