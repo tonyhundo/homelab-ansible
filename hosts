@@ -1,6 +1,6 @@
-#[desktop]
-#emperor.theseammals.com
-#fiordland.example.com
+[desktop]
+emperor.example.com
+fiordland.example.com
 
 [vms]
 grafana.example.com ansible_host=192.0.2.100
@@ -16,7 +16,7 @@ grafana.example.com ansible_host=192.0.2.100
 prometheus.example.com ansible_host=192.0.2.99
 
 [gitea]
-gitea.example.com
+gitea.example.com ansible_host=192.0.2.62
 
 [mariadb]
-mariadb.example.com
+mariadb.example.com ansible_host=192.0.2.240

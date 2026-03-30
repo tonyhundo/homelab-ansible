@@ -123,6 +123,9 @@
         validate: "visudo -cf %s"
       loop: "{{ users }}"
 
+    - name: Gather service facts
+      ansible.builtin.service_facts:
+
     - name: Ensure sshd allows pubkey auth
       ansible.builtin.lineinfile:
         path: /etc/ssh/sshd_config
@@ -142,7 +145,7 @@
   handlers:
     - name: Restart sshd
       ansible.builtin.service:
-        name: sshd
+        name: "{{ 'sshd' if ansible_facts.services['sshd.service'] is defined else 'ssh' }}"
         state: restarted
 
 - import_playbook: node_exporter.yml

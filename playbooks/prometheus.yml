@@ -95,6 +95,13 @@
           {% for host in groups['gitea'] %}
                     - '{{ hostvars[host]["ansible_host"] | default(host) }}:3000'
           {% endfor %}
+
+            - job_name: 'mariadb'
+              static_configs:
+                - targets:
+          {% for host in groups['mariadb'] %}
+                    - '{{ hostvars[host]["ansible_host"] | default(host) }}:9104'
+          {% endfor %}
       notify: Restart prometheus
 
     - name: Create prometheus systemd service
