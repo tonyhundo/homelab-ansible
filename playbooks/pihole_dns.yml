@@ -1,23 +1,110 @@
 ---
-- name: Update Pi-hole DNS record
+- name: Sync DNS records to Pi-hole
   hosts: pihole
   become: true
+  vars_files:
+    - ../dns_records.yml
 
   tasks:
-    - name: Remove existing DNS entry for hostname
-      ansible.builtin.lineinfile:
-        path: /etc/pihole/custom.list
-        regexp: '\s+{{ dns_hostname | regex_escape }}$'
-        state: absent
+    - name: Build hosts and CNAME entries
+      ansible.builtin.set_fact:
+        dns_hosts: "{{ dns_records | map(attribute='ip') | zip(dns_records | map(attribute='hostname')) | map('join', ' ') | list }}"
+        dns_cnames: "{{ dns_records | map(attribute='hostname') | map('regex_replace', '([^.]+)\\.(.+)', '\\1,\\1.\\2') | list }}"
 
-    - name: Add DNS entry for hostname
-      ansible.builtin.lineinfile:
-        path: /etc/pihole/custom.list
-        line: "{{ dns_ip }} {{ dns_hostname }}"
-        state: present
-      notify: Restart pihole DNS
+    - name: Install DNS update script
+      ansible.builtin.copy:
+        dest: /usr/local/bin/update_pihole_dns.py
+        mode: '0755'
+        content: |
+          #!/usr/bin/env python3
+          import json, sys
+
+          hosts = json.loads(sys.argv[1])
+          cnames = json.loads(sys.argv[2])
+
+          with open("/etc/pihole/pihole.toml", "r") as f:
+              lines = f.readlines()
+
+          def format_array(items):
+              out = []
+              out.append("[\n")
+              for i, item in enumerate(items):
+                  comma = "," if i < len(items) - 1 else ""
+                  out.append('    "' + item + '"' + comma + "\n")
+              out.append("]")
+              return out
+
+          def replace_toml_array(lines, section, key, items):
+              new_lines = []
+              current_section = ""
+              i = 0
+              while i < len(lines):
+                  line = lines[i]
+                  stripped = line.strip()
+
+                  if stripped.startswith("[") and not stripped.startswith("[["):
+                      current_section = stripped.strip("[]").split(".")[0]
+
+                  if current_section == section and stripped.startswith(key + " = ["):
+                      trailing = ""
+                      indent = line[:len(line) - len(line.lstrip())]
+
+                      if "]" in stripped.split("[", 1)[1]:
+                          idx = line.index("]")
+                          after_bracket = line[idx + 1:].rstrip("\n")
+                          if after_bracket.strip():
+                              trailing = " " + after_bracket.strip()
+                      else:
+                          i += 1
+                          while i < len(lines):
+                              s = lines[i].lstrip()
+                              if s.startswith("]"):
+                                  after_bracket = s[1:].rstrip("\n")
+                                  if after_bracket.strip():
+                                      trailing = " " + after_bracket.strip()
+                                  break
+                              i += 1
+
+                      arr = format_array(items)
+                      new_lines.append(indent + key + " = " + arr[0])
+                      for a in arr[1:-1]:
+                          new_lines.append(a)
+                      new_lines.append(indent + arr[-1] + trailing + "\n")
+                      i += 1
+                      continue
+
+                  new_lines.append(line)
+                  i += 1
+
+              return new_lines
+
+          def strip_timestamp(text):
+              return "\n".join(l for l in text.splitlines() if not l.startswith("# Last updated on"))
+
+          original = "".join(lines)
+          lines = replace_toml_array(lines, "dns", "hosts", hosts)
+          lines = replace_toml_array(lines, "dns", "cnameRecords", cnames)
+          result = "".join(lines)
+
+          if strip_timestamp(result) != strip_timestamp(original):
+              with open("/etc/pihole/pihole.toml", "w") as f:
+                  f.write(result)
+              print("CHANGED")
+          else:
+              print("OK")
+
+    - name: Apply DNS records to pihole.toml
+      ansible.builtin.command:
+        argv:
+          - python3
+          - /usr/local/bin/update_pihole_dns.py
+          - "{{ dns_hosts | to_json }}"
+          - "{{ dns_cnames | to_json }}"
+      register: dns_update
+      changed_when: "'CHANGED' in dns_update.stdout"
+      notify: Reload pihole DNS
 
   handlers:
-    - name: Restart pihole DNS
-      ansible.builtin.command: pihole restartdns
+    - name: Reload pihole DNS
+      ansible.builtin.command: pihole reloaddns
       changed_when: true

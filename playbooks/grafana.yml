@@ -45,6 +45,43 @@
               editable: false
       notify: Restart grafana
 
+    - name: Configure Grafana dashboard provider
+      ansible.builtin.copy:
+        dest: /etc/grafana/provisioning/dashboards/dashboards.yml
+        owner: root
+        group: grafana
+        mode: '0640'
+        content: |
+          apiVersion: 1
+          providers:
+            - name: 'default'
+              orgId: 1
+              folder: ''
+              type: file
+              disableDeletion: false
+              updateIntervalSeconds: 30
+              options:
+                path: /var/lib/grafana/dashboards
+                foldersFromFilesStructure: false
+      notify: Restart grafana
+
+    - name: Create dashboards directory
+      ansible.builtin.file:
+        path: /var/lib/grafana/dashboards
+        state: directory
+        owner: grafana
+        group: grafana
+        mode: '0755'
+
+    - name: Deploy network dashboard
+      ansible.builtin.copy:
+        src: files/grafana-network-dashboard.json
+        dest: /var/lib/grafana/dashboards/network-overview.json
+        owner: grafana
+        group: grafana
+        mode: '0644'
+      notify: Restart grafana
+
     - name: Enable and start grafana
       ansible.builtin.systemd:
         name: grafana-server
