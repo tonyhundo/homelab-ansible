@@ -1,0 +1,94 @@
+---
+- name: Install MySQL/MariaDB Exporter
+  hosts: all
+  become: true
+  vars:
+    mysqld_exporter_version: "0.19.0"
+    mysqld_exporter_db_user: exporter
+    mysqld_exporter_db_password: "***REMOVED-MYSQLD-EXPORTER-PW***"
+
+  tasks:
+    - name: Create mysqld_exporter system user
+      ansible.builtin.user:
+        name: mysqld_exporter
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Create MySQL monitoring user
+      community.mysql.mysql_user:
+        name: "{{ mysqld_exporter_db_user }}"
+        password: "{{ mysqld_exporter_db_password }}"
+        host: "localhost"
+        priv: "*.*:PROCESS,REPLICATION CLIENT,SELECT"
+        state: present
+        login_unix_socket: /run/mysqld/mysqld.sock
+
+    - name: Download mysqld_exporter
+      ansible.builtin.get_url:
+        url: "https://github.com/prometheus/mysqld_exporter/releases/download/v{{ mysqld_exporter_version }}/mysqld_exporter-{{ mysqld_exporter_version }}.linux-amd64.tar.gz"
+        dest: "/tmp/mysqld_exporter-{{ mysqld_exporter_version }}.tar.gz"
+        mode: '0644'
+
+    - name: Extract mysqld_exporter
+      ansible.builtin.unarchive:
+        src: "/tmp/mysqld_exporter-{{ mysqld_exporter_version }}.tar.gz"
+        dest: /tmp/
+        remote_src: true
+
+    - name: Install mysqld_exporter binary
+      ansible.builtin.copy:
+        src: "/tmp/mysqld_exporter-{{ mysqld_exporter_version }}.linux-amd64/mysqld_exporter"
+        dest: /usr/local/bin/mysqld_exporter
+        owner: root
+        group: root
+        mode: '0755'
+        remote_src: true
+      notify: Restart mysqld_exporter
+
+    - name: Create mysqld_exporter config
+      ansible.builtin.copy:
+        dest: /etc/.mysqld_exporter.cnf
+        owner: mysqld_exporter
+        group: mysqld_exporter
+        mode: '0600'
+        content: |
+          [client]
+          user={{ mysqld_exporter_db_user }}
+          password={{ mysqld_exporter_db_password }}
+      notify: Restart mysqld_exporter
+
+    - name: Create mysqld_exporter systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/mysqld_exporter.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=MySQL/MariaDB Exporter
+          After=network.target mariadb.service
+
+          [Service]
+          User=mysqld_exporter
+          Group=mysqld_exporter
+          Type=simple
+          ExecStart=/usr/local/bin/mysqld_exporter --config.my-cnf=/etc/.mysqld_exporter.cnf
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart mysqld_exporter
+
+    - name: Enable and start mysqld_exporter
+      ansible.builtin.systemd:
+        name: mysqld_exporter
+        enabled: true
+        state: started
+        daemon_reload: true
+
+  handlers:
+    - name: Restart mysqld_exporter
+      ansible.builtin.systemd:
+        name: mysqld_exporter
+        state: restarted

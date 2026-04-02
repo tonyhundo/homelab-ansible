@@ -1,0 +1,28 @@
+---
+dns_records:
+  - ip: "192.0.2.4"
+    hostname: emperor.example.com
+  - ip: "192.0.2.5"
+    hostname: chinstrap.example.com
+  - ip: "192.0.2.6"
+    hostname: galapagos.example.com
+  - ip: "192.0.2.10"
+    hostname: fiordland.example.com
+  - ip: "192.0.2.15"
+    hostname: pihole.example.com
+  - ip: "192.0.2.37"
+    hostname: vaultwarden.example.com
+  - ip: "192.0.2.62"
+    hostname: gitea.example.com
+  - ip: "192.0.2.63"
+    hostname: docmost.example.com
+  - ip: "192.0.2.64"
+    hostname: ansible.example.com
+  - ip: "192.0.2.67"
+    hostname: rundeck.example.com
+  - ip: "192.0.2.99"
+    hostname: prometheus.example.com
+  - ip: "192.0.2.100"
+    hostname: grafana.example.com
+  - ip: "192.0.2.240"
+    hostname: mariadb.example.com

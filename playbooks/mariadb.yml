@@ -1,0 +1,55 @@
+---
+- name: Install MariaDB
+  hosts: all
+  become: true
+  vars:
+    gitea_db_name: gitea
+    gitea_db_user: gitea
+    gitea_db_password: "***REMOVED-GITEA-DB-PW***"
+    gitea_db_host: "192.0.2.%"
+
+  tasks:
+    - name: Install MariaDB server and client
+      ansible.builtin.apt:
+        name:
+          - mariadb-server
+          - mariadb-client
+          - python3-pymysql
+        state: present
+        update_cache: true
+
+    - name: Enable and start MariaDB
+      ansible.builtin.systemd:
+        name: mariadb
+        enabled: true
+        state: started
+
+    - name: Bind MariaDB to all interfaces
+      ansible.builtin.lineinfile:
+        path: /etc/mysql/mariadb.conf.d/50-server.cnf
+        regexp: '^bind-address'
+        line: 'bind-address = 0.0.0.0'
+      notify: Restart MariaDB
+
+    - name: Create gitea database
+      community.mysql.mysql_db:
+        name: "{{ gitea_db_name }}"
+        encoding: utf8mb4
+        collation: utf8mb4_unicode_ci
+        state: present
+        login_unix_socket: /run/mysqld/mysqld.sock
+
+    - name: Create gitea database user
+      community.mysql.mysql_user:
+        name: "{{ gitea_db_user }}"
+        password: "{{ gitea_db_password }}"
+        host: "{{ gitea_db_host }}"
+        priv: "{{ gitea_db_name }}.*:ALL"
+        state: present
+        login_unix_socket: /run/mysqld/mysqld.sock
+
+  handlers:
+    - name: Restart MariaDB
+      ansible.builtin.systemd:
+        name: mariadb
+        state: restarted
