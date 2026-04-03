@@ -26,3 +26,9 @@ vaultwarden.example.com ansible_host=192.0.2.37
 
 [docmost]
 docmost.example.com ansible_host=192.0.2.63
+
+[proxmox]
+chinstrap.example.com ansible_host=192.0.2.5
+
+[n8n]
+n8n.example.com ansible_host=192.0.2.201

@@ -122,6 +122,19 @@
                   target_label: instance
                 - target_label: __address__
                   replacement: fiordland.example.com:9116
+
+            - job_name: 'pve'
+              metrics_path: /pve
+              params:
+                target: ['192.0.2.5']
+                cluster: ['1']
+                node: ['1']
+              static_configs:
+                - targets:
+                    - 'localhost:9221'
+              relabel_configs:
+                - source_labels: [__param_target]
+                  target_label: instance
       notify: Restart prometheus
 
     - name: Create prometheus systemd service

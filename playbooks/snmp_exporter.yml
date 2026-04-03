@@ -43,185 +43,30 @@
         remote_src: true
       notify: Restart snmp_exporter
 
-    - name: Deploy snmp_exporter config
+    - name: Copy bundled snmp.yml config
       ansible.builtin.copy:
+        src: "/tmp/snmp_exporter-{{ snmp_exporter_version }}.linux-amd64/snmp.yml"
         dest: /etc/snmp_exporter/snmp.yml
         owner: snmp_exporter
         group: snmp_exporter
         mode: '0600'
-        content: |
-          auths:
+        remote_src: true
+      notify: Restart snmp_exporter
+
+    - name: Add SNMPv3 auth to config
+      ansible.builtin.blockinfile:
+        path: /etc/snmp_exporter/snmp.yml
+        insertafter: "^auths:"
+        marker: "# {mark} ANSIBLE MANAGED - unifi_v3 auth"
+        block: |2
             unifi_v3:
-              community: ""
+              version: 3
               security_level: authPriv
               username: tonyhundo
               password: ***REMOVED-SNMP-PRIV-PW***
               auth_protocol: SHA
               priv_protocol: AES
               priv_password: ***REMOVED-SNMP-PRIV-PW***
-
-          modules:
-            if_mib:
-              walk:
-                - 1.3.6.1.2.1.2
-                - 1.3.6.1.2.1.31.1.1
-              get:
-                - 1.3.6.1.2.1.1.3.0
-              metrics:
-                - name: sysUpTime
-                  oid: 1.3.6.1.2.1.1.3
-                  type: gauge
-                  help: The time (in hundredths of a second) since the network management portion of the system was last re-initialized.
-                - name: ifNumber
-                  oid: 1.3.6.1.2.1.2.1
-                  type: gauge
-                  help: The number of network interfaces present on this system.
-                - name: ifIndex
-                  oid: 1.3.6.1.2.1.2.2.1.1
-                  type: gauge
-                  help: A unique value, greater than zero, for each interface.
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifDescr
-                  oid: 1.3.6.1.2.1.2.2.1.2
-                  type: DisplayString
-                  help: A textual string containing information about the interface.
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifType
-                  oid: 1.3.6.1.2.1.2.2.1.3
-                  type: gauge
-                  help: The type of interface.
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifMtu
-                  oid: 1.3.6.1.2.1.2.2.1.4
-                  type: gauge
-                  help: The size of the largest packet which can be sent/received on the interface.
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifSpeed
-                  oid: 1.3.6.1.2.1.2.2.1.5
-                  type: gauge
-                  help: An estimate of the interface current bandwidth in bits per second.
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifAdminStatus
-                  oid: 1.3.6.1.2.1.2.2.1.7
-                  type: gauge
-                  help: The desired state of the interface (1-up, 2-down, 3-testing).
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifOperStatus
-                  oid: 1.3.6.1.2.1.2.2.1.8
-                  type: gauge
-                  help: The current operational state of the interface (1-up, 2-down, 3-testing).
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifInOctets
-                  oid: 1.3.6.1.2.1.2.2.1.10
-                  type: counter
-                  help: The total number of octets received on the interface.
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifInUcastPkts
-                  oid: 1.3.6.1.2.1.2.2.1.11
-                  type: counter
-                  help: The number of unicast packets delivered to a higher-layer protocol.
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifInDiscards
-                  oid: 1.3.6.1.2.1.2.2.1.13
-                  type: counter
-                  help: The number of inbound packets chosen to be discarded.
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifInErrors
-                  oid: 1.3.6.1.2.1.2.2.1.14
-                  type: counter
-                  help: The number of inbound packets that contained errors.
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifOutOctets
-                  oid: 1.3.6.1.2.1.2.2.1.16
-                  type: counter
-                  help: The total number of octets transmitted out of the interface.
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifOutUcastPkts
-                  oid: 1.3.6.1.2.1.2.2.1.17
-                  type: counter
-                  help: The total number of unicast packets transmitted.
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifOutDiscards
-                  oid: 1.3.6.1.2.1.2.2.1.19
-                  type: counter
-                  help: The number of outbound packets chosen to be discarded.
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifOutErrors
-                  oid: 1.3.6.1.2.1.2.2.1.20
-                  type: counter
-                  help: The number of outbound packets that could not be transmitted because of errors.
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifHCInOctets
-                  oid: 1.3.6.1.2.1.31.1.1.1.6
-                  type: counter
-                  help: The total number of octets received on the interface (64-bit counter).
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifHCOutOctets
-                  oid: 1.3.6.1.2.1.31.1.1.1.10
-                  type: counter
-                  help: The total number of octets transmitted out of the interface (64-bit counter).
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifHighSpeed
-                  oid: 1.3.6.1.2.1.31.1.1.1.15
-                  type: gauge
-                  help: An estimate of the interface current bandwidth in units of 1Mbps.
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                - name: ifName
-                  oid: 1.3.6.1.2.1.31.1.1.1.1
-                  type: DisplayString
-                  help: The textual name of the interface.
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
-                  lookups:
-                    - labels:
-                        - ifIndex
-                      labelname: ifName
-                      oid: 1.3.6.1.2.1.31.1.1.1.1
-                      type: DisplayString
-                - name: ifAlias
-                  oid: 1.3.6.1.2.1.31.1.1.1.18
-                  type: DisplayString
-                  help: Alias name for the interface as specified by a network manager.
-                  indexes:
-                    - labelname: ifIndex
-                      type: Integer
       notify: Restart snmp_exporter
 
     - name: Create snmp_exporter systemd service
