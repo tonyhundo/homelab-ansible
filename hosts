@@ -20,3 +20,9 @@ gitea.example.com ansible_host=192.0.2.62
 
 [mariadb]
 mariadb.example.com ansible_host=192.0.2.240
+
+[vaultwarden]
+vaultwarden.example.com ansible_host=192.0.2.37
+
+[docmost]
+docmost.example.com ansible_host=192.0.2.63

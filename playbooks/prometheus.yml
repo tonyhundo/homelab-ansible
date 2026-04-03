@@ -121,7 +121,7 @@
                 - source_labels: [__param_target]
                   target_label: instance
                 - target_label: __address__
-                  replacement: localhost:9116
+                  replacement: fiordland.example.com:9116
       notify: Restart prometheus
 
     - name: Create prometheus systemd service
