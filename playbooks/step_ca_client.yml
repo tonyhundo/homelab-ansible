@@ -21,17 +21,24 @@
       ansible.builtin.meta: end_play
       when: not ca_root_file.stat.exists
 
+    - name: Check if step-cli is already installed
+      ansible.builtin.stat:
+        path: /usr/local/bin/step
+      register: step_cli_bin
+
     - name: Download step-cli
       ansible.builtin.get_url:
         url: "https://dl.smallstep.com/gh-release/cli/gh-release-header/v{{ step_version }}/step_linux_{{ step_version }}_amd64.tar.gz"
         dest: "/tmp/step_cli-{{ step_version }}.tar.gz"
         mode: '0644'
+      when: not step_cli_bin.stat.exists
 
     - name: Extract step-cli
       ansible.builtin.unarchive:
         src: "/tmp/step_cli-{{ step_version }}.tar.gz"
         dest: /tmp/
         remote_src: true
+      when: not step_cli_bin.stat.exists
 
     - name: Install step-cli binary
       ansible.builtin.copy:
@@ -41,6 +48,7 @@
         group: root
         mode: '0755'
         remote_src: true
+      when: not step_cli_bin.stat.exists
 
     - name: Copy root CA to system trust store
       ansible.builtin.copy:
@@ -67,17 +75,24 @@
         group: root
         mode: '0644'
 
+    - name: Check if certificate already exists
+      ansible.builtin.stat:
+        path: "{{ cert_dir }}/cert.pem"
+      register: cert_file
+
     - name: Deploy CA password for JWK provisioner fallback
       ansible.builtin.copy:
         dest: /tmp/step_ca_pw.txt
         content: "***REMOVED-STEPCA-ROOT-PW***"
         mode: '0600'
+      when: not cert_file.stat.exists
 
     - name: Check if port 80 is available
       ansible.builtin.shell:
         cmd: "ss -tlnp | grep -q ':80 ' && echo occupied || echo free"
       register: port80_check
       changed_when: false
+      when: not cert_file.stat.exists
 
     - name: Request certificate via ACME (port 80 available)
       ansible.builtin.shell:
@@ -93,7 +108,7 @@
           --san {{ hostvars[inventory_hostname]["ansible_host"] | default(inventory_hostname) }}
           --force
         creates: "{{ cert_dir }}/cert.pem"
-      when: port80_check.stdout == "free"
+      when: not cert_file.stat.exists and port80_check.stdout == "free"
 
     - name: Request certificate via JWK provisioner (port 80 occupied)
       ansible.builtin.shell:
@@ -110,12 +125,13 @@
           --san {{ hostvars[inventory_hostname]["ansible_host"] | default(inventory_hostname) }}
           --force
         creates: "{{ cert_dir }}/cert.pem"
-      when: port80_check.stdout == "occupied"
+      when: not cert_file.stat.exists and port80_check.stdout == "occupied"
 
     - name: Remove temporary password file
       ansible.builtin.file:
         path: /tmp/step_ca_pw.txt
         state: absent
+      when: not cert_file.stat.exists
 
     - name: Set certificate permissions
       ansible.builtin.file:
@@ -179,6 +195,7 @@
       ansible.builtin.file:
         path: "/tmp/step_cli-{{ step_version }}.tar.gz"
         state: absent
+      when: not step_cli_bin.stat.exists
 
   handlers:
     - name: Update CA certificates

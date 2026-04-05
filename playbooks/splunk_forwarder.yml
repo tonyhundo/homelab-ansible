@@ -1,6 +1,6 @@
 ---
 - name: Install Splunk Universal Forwarder
-  hosts: all
+  hosts: all:!splunk:!fiordland
   become: true
   vars:
     splunkuf_deb: splunkforwarder-10.2.2-80b90d638de6-linux-amd64.deb
@@ -9,17 +9,24 @@
     splunk_server: splunk.example.com:9997
 
   tasks:
+    - name: Check if Splunk UF is already installed
+      ansible.builtin.stat:
+        path: "{{ splunkuf_home }}/bin/splunk"
+      register: splunkuf_bin
+
     - name: Copy Splunk UF deb package to host
       become: false
       ansible.builtin.copy:
         src: "../pkgs/{{ splunkuf_deb }}"
         dest: "/tmp/{{ splunkuf_deb }}"
         mode: '0644'
+      when: not splunkuf_bin.stat.exists
 
     - name: Install Splunk UF deb package
       ansible.builtin.apt:
         deb: "/tmp/{{ splunkuf_deb }}"
         state: present
+      when: not splunkuf_bin.stat.exists
 
     - name: Set ownership of Splunk UF directory
       ansible.builtin.file:
@@ -93,3 +100,4 @@
       ansible.builtin.file:
         path: "/tmp/{{ splunkuf_deb }}"
         state: absent
+      when: not splunkuf_bin.stat.exists
