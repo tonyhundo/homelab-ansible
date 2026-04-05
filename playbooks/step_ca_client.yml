@@ -1,0 +1,187 @@
+---
+- name: Install Step-CA client and request certificates
+  hosts: all
+  become: true
+  vars:
+    step_version: "0.28.3"
+    ca_url: "https://192.0.2.20:8443"
+    cert_dir: /etc/ssl/example
+    ca_root_src: files/step_ca_root.pem
+
+  tasks:
+    - name: Check if root CA file exists on controller
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/files/step_ca_root.pem"
+      delegate_to: localhost
+      become: false
+      register: ca_root_file
+      run_once: true
+
+    - name: Skip if Step-CA is not yet deployed
+      ansible.builtin.meta: end_play
+      when: not ca_root_file.stat.exists
+
+    - name: Download step-cli
+      ansible.builtin.get_url:
+        url: "https://dl.smallstep.com/gh-release/cli/gh-release-header/v{{ step_version }}/step_linux_{{ step_version }}_amd64.tar.gz"
+        dest: "/tmp/step_cli-{{ step_version }}.tar.gz"
+        mode: '0644'
+
+    - name: Extract step-cli
+      ansible.builtin.unarchive:
+        src: "/tmp/step_cli-{{ step_version }}.tar.gz"
+        dest: /tmp/
+        remote_src: true
+
+    - name: Install step-cli binary
+      ansible.builtin.copy:
+        src: "/tmp/step_{{ step_version }}/bin/step"
+        dest: /usr/local/bin/step
+        owner: root
+        group: root
+        mode: '0755'
+        remote_src: true
+
+    - name: Copy root CA to system trust store
+      ansible.builtin.copy:
+        src: "{{ ca_root_src }}"
+        dest: /usr/local/share/ca-certificates/example-ca.crt
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Update CA certificates
+
+    - name: Create certificate directory
+      ansible.builtin.file:
+        path: "{{ cert_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Copy root CA to cert directory
+      ansible.builtin.copy:
+        src: "{{ ca_root_src }}"
+        dest: "{{ cert_dir }}/ca.pem"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Deploy CA password for JWK provisioner fallback
+      ansible.builtin.copy:
+        dest: /tmp/step_ca_pw.txt
+        content: "***REMOVED-STEPCA-ROOT-PW***"
+        mode: '0600'
+
+    - name: Check if port 80 is available
+      ansible.builtin.shell:
+        cmd: "ss -tlnp | grep -q ':80 ' && echo occupied || echo free"
+      register: port80_check
+      changed_when: false
+
+    - name: Request certificate via ACME (port 80 available)
+      ansible.builtin.shell:
+        cmd: >
+          /usr/local/bin/step ca certificate
+          {{ inventory_hostname }}
+          {{ cert_dir }}/cert.pem
+          {{ cert_dir }}/key.pem
+          --provisioner acme
+          --ca-url {{ ca_url }}
+          --root {{ cert_dir }}/ca.pem
+          --san {{ inventory_hostname }}
+          --san {{ hostvars[inventory_hostname]["ansible_host"] | default(inventory_hostname) }}
+          --force
+        creates: "{{ cert_dir }}/cert.pem"
+      when: port80_check.stdout == "free"
+
+    - name: Request certificate via JWK provisioner (port 80 occupied)
+      ansible.builtin.shell:
+        cmd: >
+          /usr/local/bin/step ca certificate
+          {{ inventory_hostname }}
+          {{ cert_dir }}/cert.pem
+          {{ cert_dir }}/key.pem
+          --provisioner admin
+          --provisioner-password-file /tmp/step_ca_pw.txt
+          --ca-url {{ ca_url }}
+          --root {{ cert_dir }}/ca.pem
+          --san {{ inventory_hostname }}
+          --san {{ hostvars[inventory_hostname]["ansible_host"] | default(inventory_hostname) }}
+          --force
+        creates: "{{ cert_dir }}/cert.pem"
+      when: port80_check.stdout == "occupied"
+
+    - name: Remove temporary password file
+      ansible.builtin.file:
+        path: /tmp/step_ca_pw.txt
+        state: absent
+
+    - name: Set certificate permissions
+      ansible.builtin.file:
+        path: "{{ cert_dir }}/cert.pem"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Ensure ssl-cert group exists
+      ansible.builtin.group:
+        name: ssl-cert
+        state: present
+
+    - name: Set key permissions
+      ansible.builtin.file:
+        path: "{{ cert_dir }}/key.pem"
+        owner: root
+        group: ssl-cert
+        mode: '0640'
+
+    - name: Create certificate renewal service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/step-ca-renew.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Renew Step-CA TLS certificate
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/bin/step ca renew --force {{ cert_dir }}/cert.pem {{ cert_dir }}/key.pem --ca-url {{ ca_url }} --root {{ cert_dir }}/ca.pem
+
+    - name: Create certificate renewal timer
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/step-ca-renew.timer
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Renew Step-CA TLS certificate periodically
+
+          [Timer]
+          OnCalendar=*-*-* 02:00:00
+          RandomizedDelaySec=3600
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+
+    - name: Enable renewal timer
+      ansible.builtin.systemd:
+        name: step-ca-renew.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Clean up step-cli tarball
+      ansible.builtin.file:
+        path: "/tmp/step_cli-{{ step_version }}.tar.gz"
+        state: absent
+
+  handlers:
+    - name: Update CA certificates
+      ansible.builtin.command:
+        cmd: update-ca-certificates
+      changed_when: true

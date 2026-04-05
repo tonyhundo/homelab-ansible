@@ -40,7 +40,9 @@
               type: prometheus
               uid: ds_prometheus
               access: proxy
-              url: http://prometheus.example.com:9090
+              url: https://prometheus.example.com:9090
+              jsonData:
+                tlsSkipVerify: true
               isDefault: true
               editable: false
       notify: Restart grafana
@@ -80,6 +82,28 @@
         owner: grafana
         group: grafana
         mode: '0644'
+      notify: Restart grafana
+
+    - name: Add grafana user to ssl-cert group
+      ansible.builtin.user:
+        name: grafana
+        groups: ssl-cert
+        append: true
+      notify: Restart grafana
+
+    - name: Configure Grafana TLS
+      ansible.builtin.ini_file:
+        path: /etc/grafana/grafana.ini
+        section: server
+        option: "{{ item.option }}"
+        value: "{{ item.value }}"
+        mode: '0640'
+        owner: root
+        group: grafana
+      loop:
+        - { option: protocol, value: https }
+        - { option: cert_file, value: /etc/ssl/example/cert.pem }
+        - { option: cert_key, value: /etc/ssl/example/key.pem }
       notify: Restart grafana
 
     - name: Enable and start grafana

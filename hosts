@@ -30,5 +30,14 @@ docmost.example.com ansible_host=192.0.2.63
 [proxmox]
 chinstrap.example.com ansible_host=192.0.2.5
 
+[splunk]
+splunk.example.com ansible_host=192.0.2.102
+
+[stepca]
+stepca.example.com ansible_host=192.0.2.20
+
+[fiordland]
+fiordland.example.com
+
 [n8n]
 n8n.example.com ansible_host=192.0.2.201

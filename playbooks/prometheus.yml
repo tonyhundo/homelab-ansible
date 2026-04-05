@@ -74,33 +74,43 @@
             - job_name: 'prometheus'
               static_configs:
                 - targets: ['localhost:9090']
+                  labels:
+                    instance: 'prometheus'
 
             - job_name: 'node'
               static_configs:
-                - targets:
           {% for host in groups['all'] %}
+                - targets:
                     - '{{ hostvars[host]["ansible_host"] | default(host) }}:9100'
+                  labels:
+                    instance: '{{ host.split(".")[0] }}'
           {% endfor %}
 
             - job_name: 'pihole'
               static_configs:
-                - targets:
           {% for host in groups['pihole'] %}
+                - targets:
                     - '{{ hostvars[host]["ansible_host"] | default(host) }}:9617'
+                  labels:
+                    instance: '{{ host.split(".")[0] }}'
           {% endfor %}
 
             - job_name: 'gitea'
               static_configs:
-                - targets:
           {% for host in groups['gitea'] %}
+                - targets:
                     - '{{ hostvars[host]["ansible_host"] | default(host) }}:3000'
+                  labels:
+                    instance: '{{ host.split(".")[0] }}'
           {% endfor %}
 
             - job_name: 'mariadb'
               static_configs:
-                - targets:
           {% for host in groups['mariadb'] %}
+                - targets:
                     - '{{ hostvars[host]["ansible_host"] | default(host) }}:9104'
+                  labels:
+                    instance: '{{ host.split(".")[0] }}'
           {% endfor %}
 
             - job_name: 'snmp'
@@ -135,6 +145,26 @@
               relabel_configs:
                 - source_labels: [__param_target]
                   target_label: instance
+                  replacement: 'chinstrap'
+      notify: Restart prometheus
+
+    - name: Add prometheus user to ssl-cert group
+      ansible.builtin.user:
+        name: prometheus
+        groups: ssl-cert
+        append: true
+      notify: Restart prometheus
+
+    - name: Create prometheus web config for TLS
+      ansible.builtin.copy:
+        dest: /etc/prometheus/web.yml
+        owner: prometheus
+        group: prometheus
+        mode: '0640'
+        content: |
+          tls_server_config:
+            cert_file: /etc/ssl/example/cert.pem
+            key_file: /etc/ssl/example/key.pem
       notify: Restart prometheus
 
     - name: Create prometheus systemd service
@@ -156,7 +186,9 @@
             --config.file=/etc/prometheus/prometheus.yml \
             --storage.tsdb.path=/var/lib/prometheus/ \
             --web.console.templates=/etc/prometheus/consoles \
-            --web.console.libraries=/etc/prometheus/console_libraries
+            --web.console.libraries=/etc/prometheus/console_libraries \
+            --web.enable-admin-api \
+            --web.config.file=/etc/prometheus/web.yml
           Restart=on-failure
 
           [Install]

@@ -1,0 +1,102 @@
+---
+- name: Install n8n
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Install Node.js prerequisites
+      ansible.builtin.apt:
+        name:
+          - curl
+          - gnupg
+        state: present
+        update_cache: true
+
+    - name: Add NodeSource apt repository
+      ansible.builtin.deb822_repository:
+        name: nodesource
+        types: deb
+        uris: https://deb.nodesource.com/node_20.x
+        suites: nodistro
+        components: main
+        signed_by: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+        state: present
+
+    - name: Install Node.js
+      ansible.builtin.apt:
+        name: nodejs
+        state: present
+        update_cache: true
+
+    - name: Install n8n globally
+      community.general.npm:
+        name: n8n
+        global: true
+        state: present
+
+    - name: Create n8n system user
+      ansible.builtin.user:
+        name: n8n
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: true
+        home: /var/lib/n8n
+
+    - name: Create n8n data directory
+      ansible.builtin.file:
+        path: /var/lib/n8n/.n8n
+        state: directory
+        owner: n8n
+        group: n8n
+        mode: '0750'
+
+    - name: Add n8n user to ssl-cert group
+      ansible.builtin.user:
+        name: n8n
+        groups: ssl-cert
+        append: true
+      notify: Restart n8n
+
+    - name: Create n8n systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/n8n.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=n8n - Workflow Automation
+          After=network.target
+
+          [Service]
+          User=n8n
+          Group=n8n
+          Type=simple
+          WorkingDirectory=/var/lib/n8n
+          Environment=N8N_HOST=0.0.0.0
+          Environment=N8N_PORT=5678
+          Environment=N8N_PROTOCOL=https
+          Environment=N8N_SSL_CERT=/etc/ssl/example/cert.pem
+          Environment=N8N_SSL_KEY=/etc/ssl/example/key.pem
+          Environment=GENERIC_TIMEZONE=America/New_York
+          Environment=N8N_USER_FOLDER=/var/lib/n8n
+          ExecStart=/usr/bin/n8n start
+          Restart=on-failure
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart n8n
+
+    - name: Enable and start n8n
+      ansible.builtin.systemd:
+        name: n8n
+        enabled: true
+        state: started
+        daemon_reload: true
+
+  handlers:
+    - name: Restart n8n
+      ansible.builtin.systemd:
+        name: n8n
+        state: restarted

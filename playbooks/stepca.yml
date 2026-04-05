@@ -1,0 +1,148 @@
+---
+- name: Install Step-CA
+  hosts: all
+  become: true
+  vars:
+    step_version: "0.28.3"
+    ca_name: "SeaMammals CA"
+    ca_dns: "stepca.example.com"
+    ca_address: ":8443"
+    ca_home: /etc/step-ca
+    ca_password: "***REMOVED-STEPCA-ROOT-PW***"
+
+  tasks:
+    - name: Create step system user
+      ansible.builtin.user:
+        name: step
+        system: true
+        shell: /usr/sbin/nologin
+        home: "{{ ca_home }}"
+        create_home: true
+
+    - name: Download step-cli
+      ansible.builtin.get_url:
+        url: "https://dl.smallstep.com/gh-release/cli/gh-release-header/v{{ step_version }}/step_linux_{{ step_version }}_amd64.tar.gz"
+        dest: "/tmp/step_cli-{{ step_version }}.tar.gz"
+        mode: '0644'
+
+    - name: Extract step-cli
+      ansible.builtin.unarchive:
+        src: "/tmp/step_cli-{{ step_version }}.tar.gz"
+        dest: /tmp/
+        remote_src: true
+
+    - name: Install step-cli binary
+      ansible.builtin.copy:
+        src: "/tmp/step_{{ step_version }}/bin/step"
+        dest: /usr/local/bin/step
+        owner: root
+        group: root
+        mode: '0755'
+        remote_src: true
+
+    - name: Download step-ca
+      ansible.builtin.get_url:
+        url: "https://dl.smallstep.com/gh-release/certificates/gh-release-header/v{{ step_version }}/step-ca_linux_{{ step_version }}_amd64.tar.gz"
+        dest: "/tmp/step_ca-{{ step_version }}.tar.gz"
+        mode: '0644'
+
+    - name: Extract step-ca
+      ansible.builtin.unarchive:
+        src: "/tmp/step_ca-{{ step_version }}.tar.gz"
+        dest: /tmp/
+        remote_src: true
+
+    - name: Install step-ca binary
+      ansible.builtin.copy:
+        src: /tmp/step-ca
+        dest: /usr/local/bin/step-ca
+        owner: root
+        group: root
+        mode: '0755'
+        remote_src: true
+      notify: Restart step-ca
+
+    - name: Write CA password file
+      ansible.builtin.copy:
+        dest: "{{ ca_home }}/password.txt"
+        content: "{{ ca_password }}"
+        owner: step
+        group: step
+        mode: '0600'
+
+    - name: Initialize the CA
+      ansible.builtin.shell:
+        cmd: >
+          sudo -u step STEPPATH={{ ca_home }} /usr/local/bin/step ca init
+          --name "{{ ca_name }}"
+          --dns {{ ca_dns }}
+          --dns 192.0.2.20
+          --address {{ ca_address }}
+          --provisioner admin
+          --password-file {{ ca_home }}/password.txt
+        creates: "{{ ca_home }}/config/ca.json"
+
+    - name: Check if ACME provisioner exists
+      ansible.builtin.shell:
+        cmd: "sudo -u step STEPPATH={{ ca_home }} /usr/local/bin/step ca provisioner list --admin-password-file {{ ca_home }}/password.txt 2>/dev/null | grep -q acme"
+      register: acme_check
+      changed_when: false
+      failed_when: false
+
+    - name: Add ACME provisioner
+      ansible.builtin.shell:
+        cmd: >
+          sudo -u step STEPPATH={{ ca_home }} /usr/local/bin/step ca provisioner add acme --type ACME
+          --admin-password-file {{ ca_home }}/password.txt
+      when: acme_check.rc != 0
+      notify: Restart step-ca
+
+    - name: Set ownership of CA directory
+      ansible.builtin.file:
+        path: "{{ ca_home }}"
+        owner: step
+        group: step
+        recurse: true
+
+    - name: Create step-ca systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/step-ca.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Smallstep Certificate Authority
+          After=network.target
+
+          [Service]
+          User=step
+          Group=step
+          Type=simple
+          Environment=STEPPATH={{ ca_home }}
+          ExecStart=/usr/local/bin/step-ca {{ ca_home }}/config/ca.json --password-file {{ ca_home }}/password.txt
+          Restart=on-failure
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart step-ca
+
+    - name: Enable and start step-ca
+      ansible.builtin.systemd:
+        name: step-ca
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Export root CA certificate
+      ansible.builtin.fetch:
+        src: "{{ ca_home }}/certs/root_ca.crt"
+        dest: /home/admin/homelab/ansible/playbooks/files/step_ca_root.pem
+        flat: true
+
+  handlers:
+    - name: Restart step-ca
+      ansible.builtin.systemd:
+        name: step-ca
+        state: restarted

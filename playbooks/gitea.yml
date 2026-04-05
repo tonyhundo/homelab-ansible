@@ -54,6 +54,18 @@
         mode: '0755'
       notify: Restart gitea
 
+    - name: Ensure ssl-cert group exists
+      ansible.builtin.group:
+        name: ssl-cert
+        state: present
+
+    - name: Add gitea user to ssl-cert group
+      ansible.builtin.user:
+        name: gitea
+        groups: ssl-cert
+        append: true
+      notify: Restart gitea
+
     - name: Configure Gitea
       ansible.builtin.copy:
         dest: /etc/gitea/app.ini
@@ -84,7 +96,10 @@
             SSH_DOMAIN = gitea.example.com
             DOMAIN = gitea.example.com
             HTTP_PORT = 3000
-            ROOT_URL = http://gitea.example.com:3000/
+            ROOT_URL = https://gitea.example.com:3000/
+            PROTOCOL = https
+            CERT_FILE = /etc/ssl/example/cert.pem
+            KEY_FILE = /etc/ssl/example/key.pem
             APP_DATA_PATH = /var/lib/gitea/data
             DISABLE_SSH = false
             SSH_PORT = 22

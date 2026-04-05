@@ -1,0 +1,95 @@
+---
+- name: Install Splunk Universal Forwarder
+  hosts: all
+  become: true
+  vars:
+    splunkuf_deb: splunkforwarder-10.2.2-80b90d638de6-linux-amd64.deb
+    splunkuf_home: /opt/splunkforwarder
+    splunkuf_admin_password: ***REMOVED-SPLUNK-ADMIN-PW***
+    splunk_server: splunk.example.com:9997
+
+  tasks:
+    - name: Copy Splunk UF deb package to host
+      become: false
+      ansible.builtin.copy:
+        src: "../pkgs/{{ splunkuf_deb }}"
+        dest: "/tmp/{{ splunkuf_deb }}"
+        mode: '0644'
+
+    - name: Install Splunk UF deb package
+      ansible.builtin.apt:
+        deb: "/tmp/{{ splunkuf_deb }}"
+        state: present
+
+    - name: Set ownership of Splunk UF directory
+      ansible.builtin.file:
+        path: "{{ splunkuf_home }}"
+        owner: splunkfwd
+        group: splunkfwd
+        recurse: true
+
+    - name: Accept license and set admin password on first start
+      ansible.builtin.shell:
+        cmd: >
+          sudo -u splunkfwd {{ splunkuf_home }}/bin/splunk start
+          --accept-license --answer-yes --no-prompt
+          --seed-passwd {{ splunkuf_admin_password }}
+        creates: "{{ splunkuf_home }}/var/lib/splunk"
+
+    - name: Configure forward server
+      ansible.builtin.shell:
+        cmd: >
+          sudo -u splunkfwd {{ splunkuf_home }}/bin/splunk add forward-server
+          {{ splunk_server }}
+          -auth admin:{{ splunkuf_admin_password }}
+        creates: "{{ splunkuf_home }}/etc/system/local/outputs.conf"
+
+    - name: Check which log files exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /var/log/syslog
+        - /var/log/auth.log
+      register: log_files
+
+    - name: Add monitors for existing log files
+      ansible.builtin.shell:
+        cmd: "sudo -u splunkfwd {{ splunkuf_home }}/bin/splunk add monitor {{ item.item }} -auth admin:{{ splunkuf_admin_password }}"
+      loop: "{{ log_files.results }}"
+      when: item.stat.exists
+      register: add_monitor
+      changed_when:
+        - "'already being monitored' not in add_monitor.stdout"
+        - "'already exists' not in add_monitor.stderr"
+      failed_when:
+        - add_monitor.rc != 0
+        - "'already being monitored' not in add_monitor.stdout"
+        - "'already exists' not in add_monitor.stderr"
+
+    - name: Check if SplunkForwarder service exists
+      ansible.builtin.stat:
+        path: /etc/systemd/system/SplunkForwarder.service
+      register: splunkfwd_service
+
+    - name: Stop Splunk UF before enabling boot-start
+      ansible.builtin.shell:
+        cmd: "sudo -u splunkfwd {{ splunkuf_home }}/bin/splunk stop"
+      changed_when: true
+      when: not splunkfwd_service.stat.exists
+
+    - name: Enable Splunk UF to start at boot
+      ansible.builtin.command:
+        cmd: "{{ splunkuf_home }}/bin/splunk enable boot-start -user splunkfwd --accept-license --answer-yes --no-prompt"
+        creates: /etc/systemd/system/SplunkForwarder.service
+
+    - name: Ensure Splunk UF is running
+      ansible.builtin.systemd:
+        name: SplunkForwarder
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Clean up deb package
+      ansible.builtin.file:
+        path: "/tmp/{{ splunkuf_deb }}"
+        state: absent

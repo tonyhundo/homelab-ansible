@@ -4,6 +4,8 @@ dns_records:
     hostname: emperor.example.com
   - ip: "192.0.2.5"
     hostname: chinstrap.example.com
+  - ip: "192.0.2.20"
+    hostname: stepca.example.com
   - ip: "192.0.2.6"
     hostname: galapagos.example.com
   - ip: "192.0.2.10"
@@ -24,5 +26,9 @@ dns_records:
     hostname: prometheus.example.com
   - ip: "192.0.2.100"
     hostname: grafana.example.com
+  - ip: "192.0.2.102"
+    hostname: splunk.example.com
+  - ip: "192.0.2.201"
+    hostname: n8n.example.com
   - ip: "192.0.2.240"
     hostname: mariadb.example.com

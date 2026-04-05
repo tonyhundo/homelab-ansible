@@ -1,0 +1,71 @@
+---
+- name: Install Proxmox VE Exporter
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Install pip
+      ansible.builtin.apt:
+        name: python3-pip
+        state: present
+
+    - name: Install prometheus-pve-exporter
+      ansible.builtin.pip:
+        name: prometheus-pve-exporter
+        state: present
+        break_system_packages: true
+
+    - name: Create pve_exporter config directory
+      ansible.builtin.file:
+        path: /etc/pve_exporter
+        state: directory
+        owner: root
+        group: root
+        mode: '0750'
+
+    - name: Deploy pve_exporter config
+      ansible.builtin.copy:
+        dest: /etc/pve_exporter/pve.yml
+        owner: root
+        group: root
+        mode: '0600'
+        content: |
+          default:
+            user: terraform@pam
+            token_name: terraform
+            token_value: ***REMOVED-PROXMOX-API-TOKEN***
+            verify_ssl: false
+      notify: Restart pve_exporter
+
+    - name: Create pve_exporter systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/pve_exporter.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Proxmox VE Exporter
+          After=network.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/local/bin/pve_exporter --config.file /etc/pve_exporter/pve.yml
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart pve_exporter
+
+    - name: Enable and start pve_exporter
+      ansible.builtin.systemd:
+        name: pve_exporter
+        enabled: true
+        state: started
+        daemon_reload: true
+
+  handlers:
+    - name: Restart pve_exporter
+      ansible.builtin.systemd:
+        name: pve_exporter
+        state: restarted
