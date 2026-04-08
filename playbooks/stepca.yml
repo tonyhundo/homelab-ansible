@@ -84,7 +84,7 @@
 
     - name: Check if ACME provisioner exists
       ansible.builtin.shell:
-        cmd: "sudo -u step STEPPATH={{ ca_home }} /usr/local/bin/step ca provisioner list --admin-password-file {{ ca_home }}/password.txt 2>/dev/null | grep -q acme"
+        cmd: "grep -q '\"name\": \"acme\"' {{ ca_home }}/config/ca.json"
       register: acme_check
       changed_when: false
       failed_when: false

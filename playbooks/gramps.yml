@@ -1,0 +1,201 @@
+---
+- name: Install Gramps Web
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Install Docker and nginx prerequisites
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - nginx
+        state: present
+        update_cache: true
+
+    - name: Add Docker apt repository
+      ansible.builtin.deb822_repository:
+        name: docker
+        types: deb
+        uris: https://download.docker.com/linux/debian
+        suites: "{{ ansible_distribution_release }}"
+        components: stable
+        signed_by: https://download.docker.com/linux/debian/gpg
+        state: present
+
+    - name: Install Docker
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Enable and start Docker
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Create gramps directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+      loop:
+        - /opt/grampsweb
+        - /opt/grampsweb/media
+
+    - name: Deploy docker-compose.yml
+      ansible.builtin.copy:
+        dest: /opt/grampsweb/docker-compose.yml
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          services:
+            grampsweb:
+              image: ghcr.io/gramps-project/grampsweb:latest
+              container_name: grampsweb
+              restart: unless-stopped
+              ports:
+                - "127.0.0.1:5000:5000"
+              environment:
+                GRAMPSWEB_TREE: "Gramps Web"
+                GRAMPSWEB_CELERY_CONFIG__broker_url: "redis://grampsweb_redis:6379/0"
+                GRAMPSWEB_CELERY_CONFIG__result_backend: "redis://grampsweb_redis:6379/0"
+                GRAMPSWEB_RATELIMIT_STORAGE_URI: "redis://grampsweb_redis:6379/1"
+                GRAMPSWEB_BASE_URL: "https://gramps.example.com/"
+              volumes:
+                - gramps_users:/app/users
+                - gramps_index:/app/indexdir
+                - gramps_thumb_cache:/app/thumbnail_cache
+                - gramps_cache:/app/cache
+                - gramps_secret:/app/secret
+                - gramps_db:/root/.gramps/grampsdb
+                - gramps_media:/app/media
+                - gramps_tmp:/tmp
+              depends_on:
+                - grampsweb_redis
+
+            grampsweb_celery:
+              image: ghcr.io/gramps-project/grampsweb:latest
+              container_name: grampsweb_celery
+              restart: unless-stopped
+              environment:
+                GRAMPSWEB_TREE: "Gramps Web"
+                GRAMPSWEB_CELERY_CONFIG__broker_url: "redis://grampsweb_redis:6379/0"
+                GRAMPSWEB_CELERY_CONFIG__result_backend: "redis://grampsweb_redis:6379/0"
+                GRAMPSWEB_RATELIMIT_STORAGE_URI: "redis://grampsweb_redis:6379/1"
+                GRAMPSWEB_BASE_URL: "https://gramps.example.com/"
+              volumes:
+                - gramps_users:/app/users
+                - gramps_index:/app/indexdir
+                - gramps_thumb_cache:/app/thumbnail_cache
+                - gramps_cache:/app/cache
+                - gramps_secret:/app/secret
+                - gramps_db:/root/.gramps/grampsdb
+                - gramps_media:/app/media
+                - gramps_tmp:/tmp
+              command: celery -A gramps_webapi.celery worker --loglevel=INFO --concurrency=2
+              depends_on:
+                - grampsweb_redis
+
+            grampsweb_redis:
+              image: redis:7.2-alpine
+              container_name: grampsweb_redis
+              restart: unless-stopped
+
+          volumes:
+            gramps_users:
+            gramps_index:
+            gramps_thumb_cache:
+            gramps_cache:
+            gramps_secret:
+            gramps_db:
+            gramps_media:
+            gramps_tmp:
+      notify: Restart grampsweb
+
+    - name: Start Gramps Web stack
+      ansible.builtin.shell:
+        cmd: docker compose up -d
+        chdir: /opt/grampsweb
+      register: compose_up
+      changed_when: "'Started' in compose_up.stderr or 'Creating' in compose_up.stderr"
+
+    - name: Add nginx user to ssl-cert group
+      ansible.builtin.user:
+        name: www-data
+        groups: ssl-cert
+        append: true
+      notify: Restart nginx
+
+    - name: Remove default nginx site
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Restart nginx
+
+    - name: Configure nginx reverse proxy with TLS
+      ansible.builtin.copy:
+        dest: /etc/nginx/sites-available/grampsweb
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          server {
+              listen 80;
+              server_name gramps.example.com;
+              return 301 https://$host$request_uri;
+          }
+
+          server {
+              listen 443 ssl;
+              server_name gramps.example.com;
+
+              ssl_certificate /etc/ssl/example/cert.pem;
+              ssl_certificate_key /etc/ssl/example/key.pem;
+              ssl_protocols TLSv1.2 TLSv1.3;
+
+              client_max_body_size 100M;
+
+              location / {
+                  proxy_pass http://127.0.0.1:5000;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+              }
+          }
+      notify: Restart nginx
+
+    - name: Enable nginx site
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/grampsweb
+        dest: /etc/nginx/sites-enabled/grampsweb
+        state: link
+      notify: Restart nginx
+
+    - name: Enable and start nginx
+      ansible.builtin.systemd:
+        name: nginx
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Restart grampsweb
+      ansible.builtin.shell:
+        cmd: docker compose up -d --force-recreate
+        chdir: /opt/grampsweb
+      changed_when: true
+
+    - name: Restart nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: restarted

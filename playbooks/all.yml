@@ -149,5 +149,4 @@
         state: restarted
 
 - import_playbook: node_exporter.yml
-- import_playbook: splunk_forwarder.yml
 - import_playbook: step_ca_client.yml

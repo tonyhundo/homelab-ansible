@@ -24,8 +24,6 @@ dns_records:
     hostname: prometheus.example.com
   - ip: "192.0.2.100"
     hostname: grafana.example.com
-  - ip: "192.0.2.102"
-    hostname: splunk.example.com
   - ip: "192.0.2.201"
     hostname: n8n.example.com
   - ip: "192.0.2.240"

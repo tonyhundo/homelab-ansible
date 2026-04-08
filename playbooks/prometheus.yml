@@ -113,6 +113,13 @@
                     instance: '{{ host.split(".")[0] }}'
           {% endfor %}
 
+            - job_name: 'plex'
+              static_configs:
+                - targets:
+                    - 'fiordland.example.com:9594'
+                  labels:
+                    instance: 'fiordland'
+
             - job_name: 'snmp'
               scrape_interval: 30s
               scrape_timeout: 20s

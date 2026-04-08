@@ -1,0 +1,166 @@
+---
+- name: Configure DNS over HTTPS for Pi-hole
+  hosts: pihole
+  become: true
+  vars:
+    dnscrypt_version: "2.1.5"
+
+  tasks:
+    - name: Check if dnscrypt-proxy is already installed
+      ansible.builtin.stat:
+        path: /usr/local/bin/dnscrypt-proxy
+      register: dnscrypt_bin
+
+    - name: Download dnscrypt-proxy
+      ansible.builtin.get_url:
+        url: "https://github.com/DNSCrypt/dnscrypt-proxy/releases/download/{{ dnscrypt_version }}/dnscrypt-proxy-linux_x86_64-{{ dnscrypt_version }}.tar.gz"
+        dest: "/tmp/dnscrypt-proxy-{{ dnscrypt_version }}.tar.gz"
+        mode: '0644'
+      when: not dnscrypt_bin.stat.exists
+
+    - name: Extract dnscrypt-proxy
+      ansible.builtin.unarchive:
+        src: "/tmp/dnscrypt-proxy-{{ dnscrypt_version }}.tar.gz"
+        dest: /tmp/
+        remote_src: true
+      when: not dnscrypt_bin.stat.exists
+
+    - name: Install dnscrypt-proxy binary
+      ansible.builtin.copy:
+        src: /tmp/linux-x86_64/dnscrypt-proxy
+        dest: /usr/local/bin/dnscrypt-proxy
+        owner: root
+        group: root
+        mode: '0755'
+        remote_src: true
+      when: not dnscrypt_bin.stat.exists
+
+    - name: Clean up dnscrypt-proxy tarball
+      ansible.builtin.file:
+        path: "/tmp/dnscrypt-proxy-{{ dnscrypt_version }}.tar.gz"
+        state: absent
+      when: not dnscrypt_bin.stat.exists
+
+    - name: Create dnscrypt-proxy system user
+      ansible.builtin.user:
+        name: dnscrypt
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Create dnscrypt-proxy config directory
+      ansible.builtin.file:
+        path: /etc/dnscrypt-proxy
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Create dnscrypt-proxy cache directory
+      ansible.builtin.file:
+        path: /var/cache/dnscrypt-proxy
+        state: directory
+        owner: dnscrypt
+        group: dnscrypt
+        mode: '0750'
+
+    - name: Configure dnscrypt-proxy for DoH
+      ansible.builtin.copy:
+        dest: /etc/dnscrypt-proxy/dnscrypt-proxy.toml
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          listen_addresses = ['127.0.0.1:5053']
+          max_clients = 250
+          ipv4_servers = true
+          ipv6_servers = false
+          dnscrypt_servers = false
+          doh_servers = true
+          require_dnssec = true
+          require_nolog = true
+          require_nofilter = true
+          force_tcp = false
+          timeout = 5000
+          keepalive = 30
+          cert_refresh_delay = 240
+          fallback_resolvers = ['1.1.1.1:53', '9.9.9.9:53']
+          ignore_system_dns = true
+          netprobe_timeout = 60
+          cache = true
+          cache_size = 4096
+          cache_min_ttl = 2400
+          cache_max_ttl = 86400
+
+          [sources]
+            [sources.'public-resolvers']
+            urls = ['https://raw.githubusercontent.com/DNSCrypt/dnscrypt-resolvers/master/v3/public-resolvers.md', 'https://download.dnscrypt.info/resolvers-list/v3/public-resolvers.md']
+            cache_file = '/var/cache/dnscrypt-proxy/public-resolvers.md'
+            minisign_key = 'RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3'
+            refresh_delay = 72
+      notify: Restart dnscrypt-proxy
+
+    - name: Create dnscrypt-proxy systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/dnscrypt-proxy.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=DNSCrypt-proxy DNS over HTTPS client
+          After=network.target
+
+          [Service]
+          User=dnscrypt
+          Group=dnscrypt
+          Type=simple
+          NonBlocking=true
+          ExecStart=/usr/local/bin/dnscrypt-proxy -config /etc/dnscrypt-proxy/dnscrypt-proxy.toml
+          Restart=on-failure
+          RestartSec=5
+          AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart dnscrypt-proxy
+
+    - name: Enable and start dnscrypt-proxy
+      ansible.builtin.systemd:
+        name: dnscrypt-proxy
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Update Pi-hole upstream to dnscrypt-proxy DoH
+      ansible.builtin.shell:
+        cmd: >
+          sed -i '/upstreams = \[/,/\] ### CHANGED/c\  upstreams = [ "127.0.0.1#5053" ] ### CHANGED, default = []'
+          /etc/pihole/pihole.toml
+      register: upstream_update
+      changed_when: upstream_update.rc == 0
+      notify: Restart pihole-FTL
+
+    - name: Stop and disable Unbound
+      ansible.builtin.systemd:
+        name: unbound
+        enabled: false
+        state: stopped
+
+    - name: Stop and disable cloudflared
+      ansible.builtin.systemd:
+        name: cloudflared
+        enabled: false
+        state: stopped
+      ignore_errors: true # noqa: ignore-errors
+
+  handlers:
+    - name: Restart dnscrypt-proxy
+      ansible.builtin.systemd:
+        name: dnscrypt-proxy
+        state: restarted
+
+    - name: Restart pihole-FTL
+      ansible.builtin.systemd:
+        name: pihole-FTL
+        state: restarted
