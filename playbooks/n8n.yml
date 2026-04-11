@@ -9,6 +9,7 @@
         name:
           - curl
           - gnupg
+          - jq
         state: present
         update_cache: true
 
@@ -94,6 +95,27 @@
         enabled: true
         state: started
         daemon_reload: true
+
+    - name: Install docmost_import.sh helper
+      ansible.builtin.copy:
+        src: files/docmost_import.sh
+        dest: /usr/local/bin/docmost_import.sh
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Ensure /etc/default/docmost-import exists with placeholder credentials
+      ansible.builtin.copy:
+        dest: /etc/default/docmost-import
+        owner: root
+        group: n8n
+        mode: '0640'
+        force: false
+        content: |
+          # Credentials for /usr/local/bin/docmost_import.sh
+          # Edit this file on the n8n host and set real values.
+          DOCMOST_EMAIL=CHANGEME
+          DOCMOST_PASSWORD=CHANGEME
 
   handlers:
     - name: Restart n8n
