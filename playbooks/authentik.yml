@@ -1,0 +1,187 @@
+---
+- name: Install Authentik
+  hosts: all
+  become: true
+
+  vars:
+    authentik_version: "2024.12"
+    authentik_dir: /opt/authentik
+
+  tasks:
+    - name: Install Docker prerequisites
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+        state: present
+        update_cache: true
+
+    - name: Add Docker apt repository
+      ansible.builtin.deb822_repository:
+        name: docker
+        types: deb
+        uris: https://download.docker.com/linux/debian
+        suites: "{{ ansible_distribution_release }}"
+        components: stable
+        signed_by: https://download.docker.com/linux/debian/gpg
+        state: present
+
+    - name: Install Docker
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Enable and start Docker
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Create authentik directory
+      ansible.builtin.file:
+        path: "{{ authentik_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0750'
+
+    - name: Check if TLS key exists
+      ansible.builtin.stat:
+        path: /etc/ssl/example/key.pem
+      register: tls_key
+
+    - name: Make TLS key readable for Docker bind mount
+      ansible.builtin.file:
+        path: /etc/ssl/example/key.pem
+        mode: '0644'
+      when: tls_key.stat.exists
+
+    - name: Deploy environment file
+      ansible.builtin.copy:
+        dest: "{{ authentik_dir }}/.env"
+        owner: root
+        group: root
+        mode: '0600'
+        force: false
+        content: |
+          AUTHENTIK_SECRET_KEY=***REMOVED-AUTHENTIK-SECRET-KEY***
+          PG_PASS=***REMOVED-AUTHENTIK-PG-PASS***
+          AUTHENTIK_TAG=2024.12
+      notify: Restart authentik
+
+    - name: Deploy docker-compose.yml
+      ansible.builtin.copy:
+        dest: "{{ authentik_dir }}/docker-compose.yml"
+        owner: root
+        group: root
+        mode: '0640'
+        content: |
+          services:
+            postgresql:
+              image: docker.io/library/postgres:16-alpine
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+                start_period: 20s
+                interval: 30s
+                retries: 5
+                timeout: 5s
+              volumes:
+                - database:/var/lib/postgresql/data
+              environment:
+                POSTGRES_PASSWORD: ${PG_PASS}
+                POSTGRES_USER: authentik
+                POSTGRES_DB: authentik
+
+            redis:
+              image: docker.io/library/redis:7-alpine
+              command: --save 60 1 --loglevel warning
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+                start_period: 20s
+                interval: 30s
+                retries: 5
+                timeout: 3s
+              volumes:
+                - redis:/data
+
+            server:
+              image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG}
+              restart: unless-stopped
+              command: server
+              environment:
+                AUTHENTIK_REDIS__HOST: redis
+                AUTHENTIK_POSTGRESQL__HOST: postgresql
+                AUTHENTIK_POSTGRESQL__USER: authentik
+                AUTHENTIK_POSTGRESQL__NAME: authentik
+                AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+                AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+              volumes:
+                - media:/media
+                - custom-templates:/templates
+                - /etc/ssl/example:/certs:ro
+              ports:
+                - "9000:9000"
+                - "9443:9443"
+              depends_on:
+                postgresql:
+                  condition: service_healthy
+                redis:
+                  condition: service_healthy
+
+            worker:
+              image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG}
+              restart: unless-stopped
+              command: worker
+              environment:
+                AUTHENTIK_REDIS__HOST: redis
+                AUTHENTIK_POSTGRESQL__HOST: postgresql
+                AUTHENTIK_POSTGRESQL__USER: authentik
+                AUTHENTIK_POSTGRESQL__NAME: authentik
+                AUTHENTIK_POSTGRESQL__PASSWORD: ${PG_PASS}
+                AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+              user: root
+              volumes:
+                - /var/run/docker.sock:/var/run/docker.sock
+                - media:/media
+                - custom-templates:/templates
+
+          volumes:
+            database:
+              driver: local
+            redis:
+              driver: local
+            media:
+              driver: local
+            custom-templates:
+              driver: local
+      notify: Restart authentik
+
+    - name: Pull authentik images
+      ansible.builtin.command:
+        cmd: docker compose pull
+        chdir: "{{ authentik_dir }}"
+      register: docker_pull
+      changed_when: "'Pull complete' in docker_pull.stderr"
+
+    - name: Start authentik
+      ansible.builtin.command:
+        cmd: docker compose up -d
+        chdir: "{{ authentik_dir }}"
+      register: docker_up
+      changed_when: "'Started' in docker_up.stderr or 'Creating' in docker_up.stderr"
+
+  handlers:
+    - name: Restart authentik
+      ansible.builtin.command:
+        cmd: docker compose restart
+        chdir: "{{ authentik_dir }}"
+      register: restart_result
+      changed_when: restart_result.rc == 0
