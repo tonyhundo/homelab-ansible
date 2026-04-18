@@ -96,6 +96,9 @@
           {% endfor %}
 
             - job_name: 'gitea'
+              scheme: https
+              tls_config:
+                insecure_skip_verify: true
               static_configs:
           {% for host in groups['gitea'] %}
                 - targets:
