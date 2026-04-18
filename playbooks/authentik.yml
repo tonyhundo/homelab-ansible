@@ -170,6 +170,7 @@
         chdir: "{{ authentik_dir }}"
       register: docker_pull
       changed_when: "'Pull complete' in docker_pull.stderr"
+      notify: Restart authentik
 
     - name: Start authentik
       ansible.builtin.command:
