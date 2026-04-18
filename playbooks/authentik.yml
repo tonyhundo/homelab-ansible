@@ -68,11 +68,10 @@
         owner: root
         group: root
         mode: '0600'
-        force: false
         content: |
           AUTHENTIK_SECRET_KEY=***REMOVED-AUTHENTIK-SECRET-KEY***
           PG_PASS=***REMOVED-AUTHENTIK-PG-PASS***
-          AUTHENTIK_TAG=2024.12
+          AUTHENTIK_TAG={{ authentik_version }}
       notify: Restart authentik
 
     - name: Deploy docker-compose.yml
@@ -182,7 +181,7 @@
   handlers:
     - name: Restart authentik
       ansible.builtin.command:
-        cmd: docker compose restart
+        cmd: docker compose up -d
         chdir: "{{ authentik_dir }}"
       register: restart_result
       changed_when: restart_result.rc == 0
