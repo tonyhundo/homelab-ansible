@@ -4,7 +4,7 @@
   become: true
 
   vars:
-    authentik_version: "2024.12"
+    authentik_version: "2026.2"
     authentik_dir: /opt/authentik
 
   tasks:
