@@ -83,9 +83,10 @@
     - name: Deploy CA password for JWK provisioner fallback
       ansible.builtin.copy:
         dest: /tmp/step_ca_pw.txt
-        content: "***REMOVED-STEPCA-ROOT-PW***"
+        content: "{{ ca_password }}"
         mode: '0600'
       when: not cert_file.stat.exists
+      no_log: true
 
     - name: Check if port 80 is available
       ansible.builtin.shell:

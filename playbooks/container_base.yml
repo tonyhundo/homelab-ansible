@@ -23,8 +23,6 @@
 - name: Set root password
   hosts: all
   become: true
-  vars_files:
-    - vault.yml
   tasks:
     - name: Get current root password hash
       ansible.builtin.getent:

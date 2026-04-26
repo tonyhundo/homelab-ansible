@@ -1,0 +1,30 @@
+---
+# Homelab secrets — pulled from HashiCorp Vault via AppRole.
+# Controller must have VAULT_ADDR / VAULT_ROLE_ID / VAULT_SECRET_ID exported
+# (source /etc/vault-ansible/env — written by vault_bootstrap.yml).
+#
+# root_password has an env-var fallback so the vault LXC itself can be
+# provisioned before Vault exists: `export HOMELAB_ROOT_PASSWORD=...` for
+# first-time `terraform apply` of the vault host, then unset.
+#
+# All lookups are lazy — they only fire when a task references the variable.
+
+root_password: "{{ lookup('env', 'HOMELAB_ROOT_PASSWORD') | default(lookup('community.hashi_vault.vault_kv2_get', 'homelab/root', engine_mount_point='kv', auth_method='approle').data.data.password, true) }}"
+
+ca_password: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/stepca', engine_mount_point='kv', auth_method='approle').data.data.password }}"
+
+gitea_db_password: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/gitea_db', engine_mount_point='kv', auth_method='approle').data.data.password }}"
+gitea_lfs_jwt_secret: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/gitea_internal', engine_mount_point='kv', auth_method='approle').data.data.lfs_jwt_secret }}"
+gitea_internal_token: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/gitea_internal', engine_mount_point='kv', auth_method='approle').data.data.internal_token }}"
+gitea_oauth2_jwt_secret: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/gitea_internal', engine_mount_point='kv', auth_method='approle').data.data.oauth2_jwt_secret }}"
+
+mysqld_exporter_db_password: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/mysqld_exporter_db', engine_mount_point='kv', auth_method='approle').data.data.password }}"
+plex_token: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/plex', engine_mount_point='kv', auth_method='approle').data.data.token }}"
+
+pve_api_token_id: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/pve_api', engine_mount_point='kv', auth_method='approle').data.data.token_id }}"
+pve_api_token_value: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/pve_api', engine_mount_point='kv', auth_method='approle').data.data.token_value }}"
+
+snmp_v3_password: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/snmp_v3', engine_mount_point='kv', auth_method='approle').data.data.password }}"
+
+authentik_pg_password: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/authentik', engine_mount_point='kv', auth_method='approle').data.data.pg_password }}"
+authentik_secret_key: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/authentik', engine_mount_point='kv', auth_method='approle').data.data.secret_key }}"

@@ -6,6 +6,16 @@
   vars:
     authentik_version: "2026.2"
     authentik_dir: /opt/authentik
+    # Ordered list of all major releases; stepped upgrade walks through each
+    authentik_releases:
+      - "2024.12"
+      - "2025.2"
+      - "2025.4"
+      - "2025.6"
+      - "2025.8"
+      - "2025.10"
+      - "2025.12"
+      - "2026.2"
 
   tasks:
     - name: Install Docker prerequisites
@@ -61,18 +71,6 @@
         path: /etc/ssl/example/key.pem
         mode: '0644'
       when: tls_key.stat.exists
-
-    - name: Deploy environment file
-      ansible.builtin.copy:
-        dest: "{{ authentik_dir }}/.env"
-        owner: root
-        group: root
-        mode: '0600'
-        content: |
-          AUTHENTIK_SECRET_KEY=***REMOVED-AUTHENTIK-SECRET-KEY***
-          PG_PASS=***REMOVED-AUTHENTIK-PG-PASS***
-          AUTHENTIK_TAG={{ authentik_version }}
-      notify: Restart authentik
 
     - name: Deploy docker-compose.yml
       ansible.builtin.copy:
@@ -161,27 +159,48 @@
               driver: local
             custom-templates:
               driver: local
-      notify: Restart authentik
 
-    - name: Pull authentik images
-      ansible.builtin.command:
-        cmd: docker compose pull
-        chdir: "{{ authentik_dir }}"
-      register: docker_pull
-      changed_when: "'Pull complete' in docker_pull.stderr"
-      notify: Restart authentik
+    - name: Check if .env exists
+      ansible.builtin.stat:
+        path: "{{ authentik_dir }}/.env"
+      register: env_file
 
-    - name: Start authentik
-      ansible.builtin.command:
-        cmd: docker compose up -d
-        chdir: "{{ authentik_dir }}"
-      register: docker_up
-      changed_when: "'Started' in docker_up.stderr or 'Creating' in docker_up.stderr"
+    - name: Read current AUTHENTIK_TAG from .env
+      ansible.builtin.slurp:
+        src: "{{ authentik_dir }}/.env"
+      register: env_content
+      when: env_file.stat.exists
 
-  handlers:
-    - name: Restart authentik
-      ansible.builtin.command:
-        cmd: docker compose up -d
-        chdir: "{{ authentik_dir }}"
-      register: restart_result
-      changed_when: restart_result.rc == 0
+    - name: Set current version fact
+      ansible.builtin.set_fact:
+        authentik_current_version: >-
+          {{ (env_content.content | b64decode | regex_search('AUTHENTIK_TAG=(.+)', '\1'))[0] | default('') }}
+      when: env_file.stat.exists
+
+    - name: Set current version fact for fresh install
+      ansible.builtin.set_fact:
+        authentik_current_version: ""
+      when: not env_file.stat.exists
+
+    - name: Build upgrade path
+      ansible.builtin.set_fact:
+        authentik_upgrade_path: >-
+          {{
+            authentik_releases
+            | select('version_compare', authentik_current_version, '>')
+            | select('version_compare', authentik_version, '<=')
+            | list
+          }}
+      when: authentik_current_version | length > 0
+
+    - name: Set upgrade path for fresh install
+      ansible.builtin.set_fact:
+        authentik_upgrade_path:
+          - "{{ authentik_version }}"
+      when: authentik_current_version | length == 0
+
+    - name: Step through upgrade path
+      ansible.builtin.include_tasks: authentik_upgrade_step.yml
+      loop: "{{ authentik_upgrade_path }}"
+      loop_control:
+        loop_var: step_version

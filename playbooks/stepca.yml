@@ -8,7 +8,6 @@
     ca_dns: "stepca.example.com"
     ca_address: ":8443"
     ca_home: /etc/step-ca
-    ca_password: "***REMOVED-STEPCA-ROOT-PW***"
 
   tasks:
     - name: Create step system user

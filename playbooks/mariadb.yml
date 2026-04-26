@@ -5,7 +5,6 @@
   vars:
     gitea_db_name: gitea
     gitea_db_user: gitea
-    gitea_db_password: "***REMOVED-GITEA-DB-PW***"
     gitea_db_host: "192.0.2.%"
 
   tasks:

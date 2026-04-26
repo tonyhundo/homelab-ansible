@@ -63,10 +63,10 @@
               version: 3
               security_level: authPriv
               username: tonyhundo
-              password: ***REMOVED-SNMP-PRIV-PW***
+              password: {{ snmp_v3_password }}
               auth_protocol: SHA
               priv_protocol: AES
-              priv_password: ***REMOVED-SNMP-PRIV-PW***
+              priv_password: {{ snmp_v3_password }}
       notify: Restart snmp_exporter
 
     - name: Create snmp_exporter systemd service

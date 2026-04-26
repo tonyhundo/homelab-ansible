@@ -1,0 +1,48 @@
+---
+- name: Remove Splunk Universal Forwarder
+  hosts: all
+  become: true
+  vars:
+    splunkuf_home: /opt/splunkforwarder
+
+  tasks:
+    - name: Check if Splunk UF is installed
+      ansible.builtin.stat:
+        path: "{{ splunkuf_home }}/bin/splunk"
+      register: splunkuf_bin
+
+    - name: Stop SplunkForwarder service
+      ansible.builtin.systemd:
+        name: SplunkForwarder
+        state: stopped
+        enabled: false
+      when: splunkuf_bin.stat.exists
+      ignore_errors: true # noqa: ignore-errors
+
+    - name: Remove SplunkForwarder systemd service
+      ansible.builtin.file:
+        path: /etc/systemd/system/SplunkForwarder.service
+        state: absent
+      notify: Reload systemd
+
+    - name: Remove Splunk UF directory
+      ansible.builtin.file:
+        path: "{{ splunkuf_home }}"
+        state: absent
+      when: splunkuf_bin.stat.exists
+
+    - name: Remove splunkfwd user
+      ansible.builtin.user:
+        name: splunkfwd
+        state: absent
+        remove: true
+
+    - name: Remove splunkfwd group
+      ansible.builtin.group:
+        name: splunkfwd
+        state: absent
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true

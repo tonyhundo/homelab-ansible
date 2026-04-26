@@ -2,8 +2,6 @@
 - name: Install Plex Media Server Exporter
   hosts: fiordland
   become: true
-  vars:
-    plex_token: "***REMOVED-PLEX-TOKEN***"
 
   tasks:
     - name: Ensure Docker is running

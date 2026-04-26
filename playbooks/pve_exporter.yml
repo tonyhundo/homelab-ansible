@@ -32,8 +32,8 @@
         content: |
           default:
             user: terraform@pam
-            token_name: terraform
-            token_value: ***REMOVED-PROXMOX-API-TOKEN***
+            token_name: {{ pve_api_token_id }}
+            token_value: {{ pve_api_token_value }}
             verify_ssl: false
       notify: Restart pve_exporter
 

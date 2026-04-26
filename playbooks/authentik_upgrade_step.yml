@@ -1,0 +1,85 @@
+---
+- name: "Upgrade authentik to {{ step_version }}"
+  ansible.builtin.copy:
+    dest: "{{ authentik_dir }}/.env"
+    owner: root
+    group: root
+    mode: '0600'
+    content: |
+      AUTHENTIK_SECRET_KEY={{ authentik_secret_key }}
+      PG_PASS={{ authentik_pg_password }}
+      AUTHENTIK_TAG={{ step_version }}
+  no_log: true
+
+- name: "Prune unused images before pulling {{ step_version }}"
+  ansible.builtin.command:
+    cmd: docker image prune -af
+  register: prune_result
+  changed_when: "'Total reclaimed space' in prune_result.stdout"
+
+- name: "Pull images for {{ step_version }}"
+  ansible.builtin.command:
+    cmd: docker compose pull
+    chdir: "{{ authentik_dir }}"
+  register: docker_pull
+  changed_when: "'Pull complete' in docker_pull.stderr"
+
+- name: "Start authentik {{ step_version }}"
+  ansible.builtin.command:
+    cmd: docker compose up -d
+    chdir: "{{ authentik_dir }}"
+  register: docker_up
+  changed_when: "'Started' in docker_up.stderr or 'Creating' in docker_up.stderr"
+
+- name: "Wait for worker to be healthy on {{ step_version }}"
+  ansible.builtin.command:
+    cmd: docker compose ps worker --format json
+    chdir: "{{ authentik_dir }}"
+  register: worker_status
+  until: >-
+    (worker_status.stdout | from_json).State == 'running'
+    and 'restarting' not in (worker_status.stdout | from_json).Status | default('')
+  retries: 6
+  delay: 15
+  changed_when: false
+  failed_when: false
+
+- name: "Fake buggy migration 0056 if worker failed on {{ step_version }}"
+  when: worker_status is failed or 'restarting' in (worker_status.stdout | from_json).Status | default('')
+  block:
+    - name: "Fake migration authentik_core.0056 on {{ step_version }}"
+      ansible.builtin.command:
+        cmd: docker compose exec -T server ak migrate --fake authentik_core 0056
+        chdir: "{{ authentik_dir }}"
+      register: fake_migration
+      changed_when: "'FAKED' in fake_migration.stdout"
+
+    - name: "Restart worker after faking migration on {{ step_version }}"
+      ansible.builtin.command:
+        cmd: docker compose restart worker server
+        chdir: "{{ authentik_dir }}"
+      changed_when: true
+
+    - name: "Wait for worker after migration fix on {{ step_version }}"
+      ansible.builtin.command:
+        cmd: docker compose ps worker --format json
+        chdir: "{{ authentik_dir }}"
+      register: worker_status_retry
+      until: >-
+        (worker_status_retry.stdout | from_json).State == 'running'
+        and 'restarting' not in (worker_status_retry.stdout | from_json).Status | default('')
+      retries: 30
+      delay: 10
+      changed_when: false
+
+- name: "Wait for server to be healthy on {{ step_version }}"
+  ansible.builtin.command:
+    cmd: docker compose ps server --format json
+    chdir: "{{ authentik_dir }}"
+  register: server_status
+  until: >-
+    (server_status.stdout | from_json).State == 'running'
+    and 'unhealthy' not in (server_status.stdout | from_json).Status | default('')
+  retries: 30
+  delay: 10
+  changed_when: false
