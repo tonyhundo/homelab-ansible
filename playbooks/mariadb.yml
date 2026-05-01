@@ -6,6 +6,9 @@
     gitea_db_name: gitea
     gitea_db_user: gitea
     gitea_db_host: "192.0.2.%"
+    gamefeed_db_name: gamefeed
+    gamefeed_db_user: gamefeed
+    gamefeed_db_host: "192.0.2.%"
 
   tasks:
     - name: Install MariaDB server and client
@@ -44,6 +47,23 @@
         password: "{{ gitea_db_password }}"
         host: "{{ gitea_db_host }}"
         priv: "{{ gitea_db_name }}.*:ALL"
+        state: present
+        login_unix_socket: /run/mysqld/mysqld.sock
+
+    - name: Create gamefeed database
+      community.mysql.mysql_db:
+        name: "{{ gamefeed_db_name }}"
+        encoding: utf8mb4
+        collation: utf8mb4_unicode_ci
+        state: present
+        login_unix_socket: /run/mysqld/mysqld.sock
+
+    - name: Create gamefeed database user
+      community.mysql.mysql_user:
+        name: "{{ gamefeed_db_user }}"
+        password: "{{ gamefeed_db_password }}"
+        host: "{{ gamefeed_db_host }}"
+        priv: "{{ gamefeed_db_name }}.*:ALL"
         state: present
         login_unix_socket: /run/mysqld/mysqld.sock
 

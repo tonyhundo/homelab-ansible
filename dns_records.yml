@@ -28,5 +28,9 @@ dns_records:
     hostname: n8n.example.com
   - ip: "192.0.2.204"
     hostname: authentik.example.com
+  - ip: "192.0.2.205"
+    hostname: gamefeed.example.com
+  - ip: "192.0.2.205"
+    hostname: werblin.example.com
   - ip: "192.0.2.240"
     hostname: mariadb.example.com

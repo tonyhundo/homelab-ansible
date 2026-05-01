@@ -1,0 +1,245 @@
+---
+- name: Install gamefeed (werblin.example.com)
+  hosts: all
+  become: true
+
+  vars:
+    gamefeed_repo: "https://gitea.example.com:3000/tonyhundo/gamefeed.git"
+    gamefeed_dir: /opt/gamefeed
+    gamefeed_user: gamefeed
+    gamefeed_state_dir: /var/lib/gamefeed
+    gamefeed_etc_dir: /etc/gamefeed
+    gamefeed_db_host: mariadb.example.com
+    cert_dir: /etc/ssl/example
+    site_port: 8000
+    worker_port: 8001
+    nginx_public_hostname: werblin.example.com
+
+  tasks:
+    - name: Install prerequisites
+      ansible.builtin.apt:
+        name:
+          - git
+          - python3
+          - python3-venv
+          - python3-pip
+          - nginx
+          - ca-certificates
+          - unzip
+        state: present
+        update_cache: true
+
+    - name: Create gamefeed system user
+      ansible.builtin.user:
+        name: "{{ gamefeed_user }}"
+        system: true
+        shell: /usr/sbin/nologin
+        home: "{{ gamefeed_state_dir }}"
+        create_home: true
+
+    - name: Add gamefeed user to ssl-cert group
+      ansible.builtin.group:
+        name: ssl-cert
+        state: present
+
+    - name: Grant gamefeed access to TLS materials
+      ansible.builtin.user:
+        name: "{{ gamefeed_user }}"
+        groups: ssl-cert
+        append: true
+
+    - name: Create gamefeed directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner | default(gamefeed_user) }}"
+        group: "{{ item.group | default(gamefeed_user) }}"
+        mode: "{{ item.mode | default('0750') }}"
+      loop:
+        - {path: "{{ gamefeed_dir }}"}
+        - {path: "{{ gamefeed_state_dir }}"}
+        - {path: "{{ gamefeed_state_dir }}/scratch"}
+        - {path: "{{ gamefeed_etc_dir }}", mode: '0700'}
+
+    - name: Clone gamefeed repo
+      ansible.builtin.git:
+        repo: "{{ gamefeed_repo }}"
+        dest: "{{ gamefeed_dir }}"
+        version: main
+        force: true
+      become_user: "{{ gamefeed_user }}"
+      register: gamefeed_git
+      notify:
+        - Restart gamefeed-site
+        - Restart gamefeed-worker
+
+    - name: Create Python virtualenv and install requirements
+      ansible.builtin.pip:
+        requirements: "{{ gamefeed_dir }}/requirements.txt"
+        virtualenv: "{{ gamefeed_dir }}/.venv"
+        virtualenv_command: python3 -m venv
+      become_user: "{{ gamefeed_user }}"
+      notify:
+        - Restart gamefeed-site
+        - Restart gamefeed-worker
+
+    - name: Apply database schema
+      community.mysql.mysql_db:
+        name: gamefeed
+        login_host: "{{ gamefeed_db_host }}"
+        login_user: gamefeed
+        login_password: "{{ gamefeed_db_password }}"
+        state: import
+        target: "{{ gamefeed_dir }}/app/schema.sql"
+
+    - name: Write gamefeed environment file
+      ansible.builtin.copy:
+        dest: "{{ gamefeed_etc_dir }}/env"
+        owner: "{{ gamefeed_user }}"
+        group: "{{ gamefeed_user }}"
+        mode: '0600'
+        content: |
+          DB_HOST={{ gamefeed_db_host }}
+          DB_USER=gamefeed
+          DB_PASS={{ gamefeed_db_password }}
+          DB_NAME=gamefeed
+          N8N_WEBHOOK=https://n8n.example.com:5678/webhook/gamefeed-submit
+          WORKER_TOKEN={{ gamefeed_worker_token }}
+          WEBSITE_BASE=http://127.0.0.1:{{ site_port }}
+          SCRATCH_DIR={{ gamefeed_state_dir }}/scratch
+          YT_CREDS_PATH={{ gamefeed_etc_dir }}/youtube_creds.json
+      notify:
+        - Restart gamefeed-site
+        - Restart gamefeed-worker
+
+    - name: Install gamefeed-site systemd unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/gamefeed-site.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=gamefeed website (FastAPI)
+          After=network.target
+
+          [Service]
+          User={{ gamefeed_user }}
+          Group={{ gamefeed_user }}
+          WorkingDirectory={{ gamefeed_dir }}
+          EnvironmentFile={{ gamefeed_etc_dir }}/env
+          ExecStart={{ gamefeed_dir }}/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port {{ site_port }}
+          Restart=on-failure
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Reload systemd
+
+    - name: Install gamefeed-worker systemd unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/gamefeed-worker.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=gamefeed worker (FastAPI)
+          After=network.target gamefeed-site.service
+
+          [Service]
+          User={{ gamefeed_user }}
+          Group={{ gamefeed_user }}
+          WorkingDirectory={{ gamefeed_dir }}
+          EnvironmentFile={{ gamefeed_etc_dir }}/env
+          ExecStart={{ gamefeed_dir }}/.venv/bin/uvicorn app.worker:app --host 0.0.0.0 --port {{ worker_port }}
+          Restart=on-failure
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Reload systemd
+
+    - name: Enable and start gamefeed-site
+      ansible.builtin.systemd:
+        name: gamefeed-site
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Enable and start gamefeed-worker
+      ansible.builtin.systemd:
+        name: gamefeed-worker
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Configure nginx reverse proxy with TLS
+      ansible.builtin.copy:
+        dest: /etc/nginx/sites-available/gamefeed
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          server {
+              listen 80;
+              listen 443 ssl;
+              server_name {{ nginx_public_hostname }} {{ inventory_hostname }};
+
+              ssl_certificate {{ cert_dir }}/cert.pem;
+              ssl_certificate_key {{ cert_dir }}/key.pem;
+              ssl_protocols TLSv1.2 TLSv1.3;
+
+              client_max_body_size 50m;
+
+              location / {
+                  proxy_pass http://127.0.0.1:{{ site_port }};
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+              }
+          }
+      notify: Reload nginx
+
+    - name: Enable nginx site
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/gamefeed
+        dest: /etc/nginx/sites-enabled/gamefeed
+        state: link
+        force: true
+      notify: Reload nginx
+
+    - name: Remove default nginx site
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload nginx
+
+    - name: Enable nginx
+      ansible.builtin.systemd:
+        name: nginx
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Restart gamefeed-site
+      ansible.builtin.systemd:
+        name: gamefeed-site
+        state: restarted
+        daemon_reload: true
+
+    - name: Restart gamefeed-worker
+      ansible.builtin.systemd:
+        name: gamefeed-worker
+        state: restarted
+        daemon_reload: true
+
+    - name: Reload nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded
