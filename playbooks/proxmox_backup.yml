@@ -1,0 +1,150 @@
+---
+# Deploy proxmox-backup.sh and the SSH plumbing it needs.
+#
+#   1. emperor's admin → chinstrap's admin (so the script can pull vzdump)
+#   2. n8n's n8n user → emperor's admin  (so the workflow can trigger the script)
+#
+# Run as:
+#   ansible-playbook -i hosts playbooks/proxmox_backup.yml
+
+- name: Ensure SSH key exists for emperor → chinstrap
+  hosts: emperor.example.com
+  gather_facts: false
+  tasks:
+    - name: Ensure ~/.ssh exists
+      ansible.builtin.file:
+        path: "/home/admin/.ssh"
+        state: directory
+        mode: "0700"
+        owner: admin
+        group: admin
+
+    - name: Generate ed25519 keypair if missing
+      ansible.builtin.user:
+        name: admin
+        generate_ssh_key: true
+        ssh_key_type: ed25519
+        ssh_key_file: .ssh/proxmox_backup_id_ed25519
+        ssh_key_comment: "admin@emperor proxmox-backup"
+
+    - name: Read public key
+      ansible.builtin.slurp:
+        src: "/home/admin/.ssh/proxmox_backup_id_ed25519.pub"
+      register: emperor_pubkey
+
+    - name: Stash pubkey for next play
+      ansible.builtin.set_fact:
+        emperor_backup_pubkey: "{{ emperor_pubkey.content | b64decode | trim }}"
+
+- name: Authorize emperor's pubkey on chinstrap
+  hosts: chinstrap.example.com
+  gather_facts: false
+  vars:
+    pubkey: "{{ hostvars['emperor.example.com'].emperor_backup_pubkey }}"
+  tasks:
+    - name: Add emperor pubkey to admin@chinstrap authorized_keys
+      ansible.posix.authorized_key:
+        user: admin
+        key: "{{ pubkey }}"
+        comment: "emperor proxmox-backup"
+        state: present
+
+- name: Install proxmox-backup script on emperor
+  hosts: emperor.example.com
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Ensure backups dir
+      ansible.builtin.file:
+        path: /home/admin/backups
+        state: directory
+        owner: admin
+        group: admin
+        mode: "0750"
+
+    - name: Install proxmox-backup.sh
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../scripts/proxmox-backup.sh"
+        dest: /usr/local/bin/proxmox-backup.sh
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Smoke-test SSH from emperor → chinstrap (sudo NOPASSWD path)
+      ansible.builtin.command:
+        cmd: ssh -i /home/admin/.ssh/proxmox_backup_id_ed25519
+              -o BatchMode=yes -o StrictHostKeyChecking=accept-new
+              admin@chinstrap.example.com "sudo -n test -x /usr/bin/vzdump && echo OK"
+      become_user: admin
+      register: smoke
+      changed_when: false
+      failed_when: smoke.rc != 0 or 'OK' not in smoke.stdout
+
+    - name: Configure SSH default key for admin
+      ansible.builtin.blockinfile:
+        path: /home/admin/.ssh/config
+        create: true
+        owner: admin
+        group: admin
+        mode: "0600"
+        marker: "# {mark} ANSIBLE proxmox-backup"
+        block: |
+          Host chinstrap.example.com chinstrap
+            User admin
+            IdentityFile ~/.ssh/proxmox_backup_id_ed25519
+            IdentitiesOnly yes
+
+- name: Set up n8n → emperor SSH key for scheduled trigger
+  hosts: n8n.example.com
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Ensure n8n's .ssh dir exists
+      ansible.builtin.file:
+        path: /var/lib/n8n/.ssh
+        state: directory
+        owner: n8n
+        group: n8n
+        mode: "0700"
+
+    - name: Generate ed25519 keypair for n8n user if missing
+      community.crypto.openssh_keypair:
+        path: /var/lib/n8n/.ssh/proxmox_backup_id_ed25519
+        type: ed25519
+        owner: n8n
+        group: n8n
+        mode: "0600"
+        comment: "n8n@n8n proxmox-backup"
+
+    - name: Read n8n pubkey
+      ansible.builtin.slurp:
+        src: /var/lib/n8n/.ssh/proxmox_backup_id_ed25519.pub
+      register: n8n_pubkey
+
+    - name: Stash n8n pubkey
+      ansible.builtin.set_fact:
+        n8n_backup_pubkey: "{{ n8n_pubkey.content | b64decode | trim }}"
+
+    - name: Pre-trust emperor host key
+      ansible.builtin.shell: |
+        set -o pipefail
+        ssh-keyscan -t ed25519 emperor.example.com 2>/dev/null \
+          > /var/lib/n8n/.ssh/known_hosts
+        chown n8n:n8n /var/lib/n8n/.ssh/known_hosts
+        chmod 0644 /var/lib/n8n/.ssh/known_hosts
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+- name: Authorize n8n's pubkey on emperor
+  hosts: emperor.example.com
+  gather_facts: false
+  vars:
+    pubkey: "{{ hostvars['n8n.example.com'].n8n_backup_pubkey }}"
+  tasks:
+    - name: Add n8n pubkey to admin@emperor authorized_keys
+      ansible.posix.authorized_key:
+        user: admin
+        key: "{{ pubkey }}"
+        comment: "n8n proxmox-backup"
+        state: present
