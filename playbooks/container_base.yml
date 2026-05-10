@@ -6,6 +6,7 @@
     - name: Install default packages
       ansible.builtin.apt:
         name:
+          - acl
           - htop
           - net-tools
           - openssh-server

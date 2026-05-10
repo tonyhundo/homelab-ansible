@@ -34,3 +34,7 @@ dns_records:
     hostname: werblin.example.com
   - ip: "192.0.2.240"
     hostname: mariadb.example.com
+  - ip: "192.0.2.203"
+    hostname: vault.example.com
+  - ip: "192.0.2.206"
+    hostname: unifi.example.com
