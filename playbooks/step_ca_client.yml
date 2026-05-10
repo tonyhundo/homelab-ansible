@@ -80,20 +80,20 @@
         path: "{{ cert_dir }}/cert.pem"
       register: cert_file
 
-    - name: Deploy CA password for JWK provisioner fallback
-      ansible.builtin.copy:
-        dest: /tmp/step_ca_pw.txt
-        content: "{{ ca_password }}"
-        mode: '0600'
-      when: not cert_file.stat.exists
-      no_log: true
-
     - name: Check if port 80 is available
       ansible.builtin.shell:
         cmd: "ss -tlnp | grep -q ':80 ' && echo occupied || echo free"
       register: port80_check
       changed_when: false
       when: not cert_file.stat.exists
+
+    - name: Deploy CA password for JWK provisioner fallback
+      ansible.builtin.copy:
+        dest: /tmp/step_ca_pw.txt
+        content: "{{ ca_password }}"
+        mode: '0600'
+      when: not cert_file.stat.exists and port80_check.stdout == "occupied"
+      no_log: true
 
     - name: Request certificate via ACME (port 80 available)
       ansible.builtin.shell:
@@ -132,7 +132,7 @@
       ansible.builtin.file:
         path: /tmp/step_ca_pw.txt
         state: absent
-      when: not cert_file.stat.exists
+      when: not cert_file.stat.exists and port80_check.stdout == "occupied"
 
     - name: Set certificate permissions
       ansible.builtin.file:
@@ -165,7 +165,7 @@
 
           [Service]
           Type=oneshot
-          ExecStart=/usr/local/bin/step ca renew --force {{ cert_dir }}/cert.pem {{ cert_dir }}/key.pem --ca-url {{ ca_url }} --root {{ cert_dir }}/ca.pem
+          ExecStart=/usr/local/bin/step ca renew {{ cert_dir }}/cert.pem {{ cert_dir }}/key.pem --ca-url {{ ca_url }} --root {{ cert_dir }}/ca.pem --force
 
     - name: Create certificate renewal timer
       ansible.builtin.copy:

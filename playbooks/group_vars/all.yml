@@ -9,9 +9,9 @@
 #
 # All lookups are lazy — they only fire when a task references the variable.
 
-root_password: "{{ lookup('env', 'HOMELAB_ROOT_PASSWORD') | default(lookup('community.hashi_vault.vault_kv2_get', 'homelab/root', engine_mount_point='kv', auth_method='approle').data.data.password, true) }}"
+root_password: "{{ lookup('env', 'HOMELAB_ROOT_PASSWORD') or lookup('community.hashi_vault.vault_kv2_get', 'homelab/root', engine_mount_point='kv', auth_method='approle').data.data.password }}"
 
-ca_password: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/stepca', engine_mount_point='kv', auth_method='approle').data.data.password }}"
+ca_password: "{{ lookup('env', 'HOMELAB_CA_PASSWORD') or lookup('community.hashi_vault.vault_kv2_get', 'homelab/stepca', engine_mount_point='kv', auth_method='approle').data.data.password }}"
 
 gitea_db_password: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/gitea_db', engine_mount_point='kv', auth_method='approle').data.data.password }}"
 gitea_lfs_jwt_secret: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/gitea_internal', engine_mount_point='kv', auth_method='approle').data.data.lfs_jwt_secret }}"
