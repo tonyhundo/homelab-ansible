@@ -1,0 +1,60 @@
+---
+# Patch all servers: apt update + dist-upgrade + autoremove, with optional reboot.
+#
+# Usage:
+#   ansible-playbook -i hosts playbooks/patch.yml                          # report-only
+#   ansible-playbook -i hosts playbooks/patch.yml -e auto_reboot=true      # reboot when needed
+#   ansible-playbook -i hosts playbooks/patch.yml --limit prometheus       # one host
+#   ansible-playbook -i hosts playbooks/patch.yml -e patch_serial=4        # 4 in parallel
+#
+# Defaults to one host at a time so a bad upgrade can't break the whole fleet.
+- name: Patch all servers
+  hosts: all
+  become: true
+  serial: "{{ patch_serial | default(1) }}"
+  vars:
+    auto_reboot: false
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Run dist-upgrade with autoremove
+      ansible.builtin.apt:
+        upgrade: dist
+        autoremove: true
+      register: upgrade_result
+
+    - name: Show packages upgraded
+      ansible.builtin.debug:
+        msg: "{{ upgrade_result.stdout_lines | select('match', '^(Inst|Conf|Remv) ') | list }}"
+      when: upgrade_result.changed
+
+    - name: Autoclean apt cache
+      ansible.builtin.apt:
+        autoclean: true
+
+    - name: Check if reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: Reboot if required (auto_reboot enabled)
+      ansible.builtin.reboot:
+        msg: Reboot triggered by patch.yml
+        connect_timeout: 5
+        reboot_timeout: 600
+        post_reboot_delay: 30
+        test_command: uptime
+      when:
+        - reboot_required.stat.exists
+        - auto_reboot | bool
+
+    - name: Flag hosts that still need a reboot
+      ansible.builtin.debug:
+        msg: "REBOOT REQUIRED on {{ inventory_hostname }} (re-run with -e auto_reboot=true)"
+      when:
+        - reboot_required.stat.exists
+        - not (auto_reboot | bool)
