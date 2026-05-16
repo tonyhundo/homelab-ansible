@@ -1,6 +1,6 @@
 ---
 - name: Install Prometheus
-  hosts: all
+  hosts: prometheus
   become: true
   vars:
     prometheus_version: "2.51.0"

@@ -1,0 +1,51 @@
+---
+# Remove an accidental prometheus install from any host that isn't in the
+# `prometheus` group. Created after `prometheus.yml` was run without --limit
+# and (because that play used `hosts: all`) installed prometheus everywhere.
+#
+# Usage: ansible-playbook -i hosts playbooks/prometheus_uninstall.yml
+- name: Uninstall Prometheus from non-prometheus hosts
+  hosts: all:!prometheus
+  become: true
+
+  tasks:
+    - name: Stop and disable prometheus service
+      ansible.builtin.systemd:
+        name: prometheus
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Remove systemd unit
+      ansible.builtin.file:
+        path: /etc/systemd/system/prometheus.service
+        state: absent
+      notify: Reload systemd
+
+    - name: Remove prometheus binaries
+      ansible.builtin.file:
+        path: "/usr/local/bin/{{ item }}"
+        state: absent
+      loop:
+        - prometheus
+        - promtool
+
+    - name: Remove prometheus directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/prometheus
+        - /var/lib/prometheus
+
+    - name: Remove prometheus system user
+      ansible.builtin.user:
+        name: prometheus
+        state: absent
+        remove: true
+      failed_when: false
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
