@@ -1,0 +1,340 @@
+---
+# Deploy ansible-drift.sh and the SSH plumbing it needs.
+#
+#   1. emperor's admin → Gitea (so the script can pull/push the ansible repo)
+#      -- the Gitea SSH key is set up out-of-band; see RUNBOOK note below.
+#   2. n8n's n8n user → emperor's admin (so the workflow can trigger the script)
+#
+# Run as:
+#   ansible-playbook -i hosts playbooks/ansible_drift.yml
+
+- name: Clone ansible repo on emperor and install drift script
+  hosts: emperor.example.com
+  gather_facts: false
+  tasks:
+    - name: Ensure ~/.ssh exists
+      ansible.builtin.file:
+        path: /home/admin/.ssh
+        state: directory
+        mode: "0700"
+        owner: admin
+        group: admin
+
+    - name: Pre-trust Gitea host key
+      ansible.builtin.shell: |
+        set -o pipefail
+        ssh-keyscan -t ed25519,rsa gitea.example.com 2>/dev/null \
+          >> /home/admin/.ssh/known_hosts
+        sort -u -o /home/admin/.ssh/known_hosts /home/admin/.ssh/known_hosts
+        chown admin:admin /home/admin/.ssh/known_hosts
+        chmod 0644 /home/admin/.ssh/known_hosts
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Clone ansible repo (emperor is source of truth)
+      ansible.builtin.git:
+        repo: "gitea@gitea.example.com:example/ansible.git"
+        dest: /home/admin/ansible
+        version: main
+        update: false
+        accept_hostkey: true
+      become_user: admin
+      become: true
+
+    - name: Configure git identity for auto-commits
+      community.general.git_config:
+        scope: local
+        repo: /home/admin/ansible
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+      loop:
+        - { name: "user.name",  value: "ansible-drift" }
+        - { name: "user.email", value: "ansible-drift@emperor.example.com" }
+      become_user: admin
+      become: true
+
+    - name: Install ansible-drift.sh
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../scripts/ansible-drift.sh"
+        dest: /usr/local/bin/ansible-drift.sh
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+
+- name: Ensure n8n → emperor SSH key for drift job
+  hosts: n8n.example.com
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Ensure n8n .ssh dir
+      ansible.builtin.file:
+        path: /var/lib/n8n/.ssh
+        state: directory
+        owner: n8n
+        group: n8n
+        mode: "0700"
+
+    - name: Generate ed25519 keypair for ansible-drift
+      community.crypto.openssh_keypair:
+        path: /var/lib/n8n/.ssh/ansible_drift_id_ed25519
+        type: ed25519
+        owner: n8n
+        group: n8n
+        mode: "0600"
+        comment: "n8n@n8n ansible-drift"
+
+    - name: Read n8n drift pubkey
+      ansible.builtin.slurp:
+        src: /var/lib/n8n/.ssh/ansible_drift_id_ed25519.pub
+      register: n8n_drift_pubkey
+
+    - name: Stash n8n drift pubkey
+      ansible.builtin.set_fact:
+        n8n_drift_pubkey_val: "{{ n8n_drift_pubkey.content | b64decode | trim }}"
+
+    - name: Pre-trust emperor host key
+      ansible.builtin.shell: |
+        set -o pipefail
+        ssh-keyscan -t ed25519 emperor.example.com 2>/dev/null \
+          >> /var/lib/n8n/.ssh/known_hosts
+        sort -u -o /var/lib/n8n/.ssh/known_hosts /var/lib/n8n/.ssh/known_hosts
+        chown n8n:n8n /var/lib/n8n/.ssh/known_hosts
+        chmod 0644 /var/lib/n8n/.ssh/known_hosts
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+- name: Authorize n8n drift pubkey on emperor
+  hosts: emperor.example.com
+  gather_facts: false
+  vars:
+    pubkey: "{{ hostvars['n8n.example.com'].n8n_drift_pubkey_val }}"
+  tasks:
+    - name: Add n8n drift pubkey to admin@emperor authorized_keys
+      ansible.posix.authorized_key:
+        user: admin
+        key: "{{ pubkey }}"
+        comment: "n8n ansible-drift"
+        state: present
+
+- name: Install Ansible Drift workflow + credential into n8n
+  hosts: n8n.example.com
+  become: true
+  gather_facts: false
+  vars:
+    n8n_db: /var/lib/n8n/.n8n/database.sqlite
+    drift_key_path: /var/lib/n8n/.ssh/ansible_drift_id_ed25519
+    cred_name: "Emperor SSH (Drift)"
+    smtp_cred_name: "Gmail SMTP (Drift)"
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 587
+    smtp_from: "alerts@example.com"
+    smtp_to: "alerts@example.com"
+    workflow_name: "Ansible Drift"
+  tasks:
+    - name: Ensure sqlite3 is installed (used to read entity ids)
+      ansible.builtin.apt:
+        name: sqlite3
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Look up existing credential id (if any)
+      ansible.builtin.command:
+        argv:
+          - sqlite3
+          - "{{ n8n_db }}"
+          - "SELECT id FROM credentials_entity WHERE name = '{{ cred_name }}' ORDER BY updatedAt DESC LIMIT 1"
+      register: cred_lookup
+      changed_when: false
+
+    - name: Pick credential id (reuse existing, else generate)
+      ansible.builtin.set_fact:
+        cred_id: >-
+          {{ (cred_lookup.stdout | trim)
+             or (lookup('password', '/dev/null length=16 chars=ascii_letters,digits')) }}
+
+    - name: Read drift private key content
+      ansible.builtin.slurp:
+        src: "{{ drift_key_path }}"
+      register: drift_key
+      no_log: true
+
+    - name: Render credential JSON to a tempfile
+      ansible.builtin.tempfile:
+        state: file
+        suffix: ".json"
+      register: cred_tmp
+
+    - name: Write credential JSON
+      ansible.builtin.template:
+        src: n8n_ansible_drift_credential.json.j2
+        dest: "{{ cred_tmp.path }}"
+        owner: n8n
+        group: n8n
+        mode: "0600"
+      vars:
+        cred_private_key: "{{ drift_key.content | b64decode }}"
+      no_log: true
+
+    - name: Import credential into n8n
+      ansible.builtin.command:
+        argv:
+          - sudo
+          - "-u"
+          - n8n
+          - n8n
+          - "import:credentials"
+          - "--input={{ cred_tmp.path }}"
+      register: cred_import
+      changed_when: "'Successfully imported' in cred_import.stdout"
+
+    - name: Remove credential tempfile
+      ansible.builtin.file:
+        path: "{{ cred_tmp.path }}"
+        state: absent
+
+    - name: Re-read credential id after import
+      ansible.builtin.command:
+        argv:
+          - sqlite3
+          - "{{ n8n_db }}"
+          - "SELECT id FROM credentials_entity WHERE name = '{{ cred_name }}' ORDER BY updatedAt DESC LIMIT 1"
+      register: cred_after
+      changed_when: false
+
+    - name: Set final credential id
+      ansible.builtin.set_fact:
+        cred_final_id: "{{ cred_after.stdout | trim }}"
+
+    - name: Fail if credential id not found
+      ansible.builtin.fail:
+        msg: "credential '{{ cred_name }}' not found in n8n db after import"
+      when: cred_final_id | length == 0
+
+    # --- SMTP credential (for success/failure email reports) ---
+
+    - name: Look up existing SMTP credential id (if any)
+      ansible.builtin.command:
+        argv:
+          - sqlite3
+          - "{{ n8n_db }}"
+          - "SELECT id FROM credentials_entity WHERE name = '{{ smtp_cred_name }}' ORDER BY updatedAt DESC LIMIT 1"
+      register: smtp_cred_lookup
+      changed_when: false
+
+    - name: Pick SMTP credential id (reuse existing, else generate)
+      ansible.builtin.set_fact:
+        smtp_cred_id: >-
+          {{ (smtp_cred_lookup.stdout | trim)
+             or (lookup('password', '/dev/null length=16 chars=ascii_letters,digits')) }}
+
+    - name: Render SMTP credential JSON to a tempfile
+      ansible.builtin.tempfile:
+        state: file
+        suffix: ".json"
+      register: smtp_cred_tmp
+
+    - name: Write SMTP credential JSON
+      ansible.builtin.template:
+        src: n8n_ansible_drift_smtp_credential.json.j2
+        dest: "{{ smtp_cred_tmp.path }}"
+        owner: n8n
+        group: n8n
+        mode: "0600"
+      no_log: true
+
+    - name: Import SMTP credential into n8n
+      ansible.builtin.command:
+        argv:
+          - sudo
+          - "-u"
+          - n8n
+          - n8n
+          - "import:credentials"
+          - "--input={{ smtp_cred_tmp.path }}"
+      register: smtp_cred_import
+      changed_when: "'Successfully imported' in smtp_cred_import.stdout"
+
+    - name: Remove SMTP credential tempfile
+      ansible.builtin.file:
+        path: "{{ smtp_cred_tmp.path }}"
+        state: absent
+
+    - name: Re-read SMTP credential id after import
+      ansible.builtin.command:
+        argv:
+          - sqlite3
+          - "{{ n8n_db }}"
+          - "SELECT id FROM credentials_entity WHERE name = '{{ smtp_cred_name }}' ORDER BY updatedAt DESC LIMIT 1"
+      register: smtp_cred_after
+      changed_when: false
+
+    - name: Set final SMTP credential id
+      ansible.builtin.set_fact:
+        smtp_cred_final_id: "{{ smtp_cred_after.stdout | trim }}"
+
+    - name: Fail if SMTP credential id not found
+      ansible.builtin.fail:
+        msg: "credential '{{ smtp_cred_name }}' not found in n8n db after import"
+      when: smtp_cred_final_id | length == 0
+
+    - name: Render workflow JSON to a tempfile
+      ansible.builtin.tempfile:
+        state: file
+        suffix: ".json"
+      register: wf_tmp
+
+    - name: Write workflow JSON
+      ansible.builtin.template:
+        src: n8n_ansible_drift_workflow.json.j2
+        dest: "{{ wf_tmp.path }}"
+        owner: n8n
+        group: n8n
+        mode: "0600"
+
+    - name: Import workflow into n8n
+      ansible.builtin.command:
+        argv:
+          - sudo
+          - "-u"
+          - n8n
+          - n8n
+          - "import:workflow"
+          - "--input={{ wf_tmp.path }}"
+      register: wf_import
+      changed_when: "'Successfully imported' in wf_import.stdout"
+
+    - name: Remove workflow tempfile
+      ansible.builtin.file:
+        path: "{{ wf_tmp.path }}"
+        state: absent
+
+    - name: Look up workflow id
+      ansible.builtin.command:
+        argv:
+          - sqlite3
+          - "{{ n8n_db }}"
+          - "SELECT id FROM workflow_entity WHERE name = '{{ workflow_name }}' ORDER BY updatedAt DESC LIMIT 1"
+      register: wf_lookup
+      changed_when: false
+
+    - name: Fail if workflow id not found
+      ansible.builtin.fail:
+        msg: "workflow '{{ workflow_name }}' not found in n8n db after import"
+      when: wf_lookup.stdout | trim | length == 0
+
+    - name: Activate workflow
+      ansible.builtin.command:
+        argv:
+          - sudo
+          - "-u"
+          - n8n
+          - n8n
+          - "update:workflow"
+          - "--id={{ wf_lookup.stdout | trim }}"
+          - "--active=true"
+      register: wf_activate
+      changed_when: "'1' in wf_activate.stdout"

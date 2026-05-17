@@ -1,0 +1,109 @@
+---
+# OpenTelemetry Collector for Claude Code usage metrics.
+#
+# Claude Code on emperor exports OTLP/HTTP metrics to localhost:4318.
+# This collector receives them and exposes a /metrics endpoint on :8889
+# which Prometheus scrapes.
+#
+# The env vars in /etc/profile.d/claude-code-otel.sh tell Claude Code where
+# to send its metrics and turn off the per-session cardinality labels that
+# would otherwise create one new Prometheus series per CLI session.
+- name: Install OpenTelemetry Collector for Claude Code metrics
+  hosts: desktop
+  become: true
+  vars:
+    otelcol_version: "0.111.0"
+    otelcol_endpoint_http: "0.0.0.0:4318"
+    otelcol_prom_endpoint: "0.0.0.0:8889"
+
+  tasks:
+    - name: Check installed otelcol-contrib version
+      ansible.builtin.command: dpkg-query -W -f='${Version}' otelcol-contrib
+      register: otelcol_installed
+      failed_when: false
+      changed_when: false
+
+    - name: Download otelcol-contrib deb
+      ansible.builtin.get_url:
+        url: "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v{{ otelcol_version }}/otelcol-contrib_{{ otelcol_version }}_linux_amd64.deb"
+        dest: "/tmp/otelcol-contrib_{{ otelcol_version }}_linux_amd64.deb"
+        mode: '0644'
+      when: otelcol_installed.stdout != otelcol_version
+
+    - name: Install otelcol-contrib
+      ansible.builtin.apt:
+        deb: "/tmp/otelcol-contrib_{{ otelcol_version }}_linux_amd64.deb"
+      when: otelcol_installed.stdout != otelcol_version
+      notify: Restart otelcol-contrib
+
+    - name: Deploy collector config
+      ansible.builtin.copy:
+        dest: /etc/otelcol-contrib/config.yaml
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          receivers:
+            otlp:
+              protocols:
+                http:
+                  endpoint: {{ otelcol_endpoint_http }}
+
+          processors:
+            batch:
+              timeout: 10s
+              send_batch_size: 1024
+
+          exporters:
+            prometheus:
+              endpoint: {{ otelcol_prom_endpoint }}
+              resource_to_telemetry_conversion:
+                enabled: true
+
+          service:
+            telemetry:
+              logs:
+                level: warn
+            pipelines:
+              metrics:
+                receivers: [otlp]
+                processors: [batch]
+                exporters: [prometheus]
+      notify: Restart otelcol-contrib
+
+    - name: Enable and start otelcol-contrib
+      ansible.builtin.systemd:
+        name: otelcol-contrib
+        enabled: true
+        state: started
+
+    # /etc/environment is read by PAM at login (SSH, console, su -l) and
+    # propagates to non-login shells too. /etc/profile.d/*.sh would only fire
+    # for login shells, so Claude Code launched from tmux/IDE/SSH-exec sessions
+    # would never see the vars.
+    - name: Deploy Claude Code OTel env vars
+      ansible.builtin.blockinfile:
+        path: /etc/environment
+        create: true
+        owner: root
+        group: root
+        mode: '0644'
+        marker: "# {mark} ANSIBLE MANAGED BLOCK claude-code-otel"
+        block: |
+          CLAUDE_CODE_ENABLE_TELEMETRY=1
+          OTEL_METRICS_EXPORTER=otlp
+          OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+          OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+          OTEL_METRICS_INCLUDE_SESSION_ID=false
+          OTEL_METRICS_INCLUDE_ACCOUNT_UUID=false
+
+    - name: Remove stale profile.d env file
+      ansible.builtin.file:
+        path: /etc/profile.d/claude-code-otel.sh
+        state: absent
+
+  handlers:
+    - name: Restart otelcol-contrib
+      ansible.builtin.systemd:
+        name: otelcol-contrib
+        state: restarted

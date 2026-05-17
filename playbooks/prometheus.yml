@@ -156,6 +156,13 @@
                 - source_labels: [__param_target]
                   target_label: instance
                   replacement: 'chinstrap'
+
+            - job_name: 'claude_code'
+              static_configs:
+                - targets:
+                    - 'emperor.example.com:8889'
+                  labels:
+                    instance: 'emperor'
       notify: Restart prometheus
 
     - name: Add prometheus user to ssl-cert group

@@ -84,6 +84,24 @@
         mode: '0644'
       notify: Restart grafana
 
+    - name: Deploy claude-code dashboard
+      ansible.builtin.copy:
+        src: files/grafana-claude-code-dashboard.json
+        dest: /var/lib/grafana/dashboards/claude-code-usage.json
+        owner: grafana
+        group: grafana
+        mode: '0644'
+      notify: Restart grafana
+
+    - name: Deploy homelab overview dashboard
+      ansible.builtin.copy:
+        src: files/grafana-homelab-overview-dashboard.json
+        dest: /var/lib/grafana/dashboards/homelab-overview.json
+        owner: grafana
+        group: grafana
+        mode: '0644'
+      notify: Restart grafana
+
     - name: Add grafana user to ssl-cert group
       ansible.builtin.user:
         name: grafana

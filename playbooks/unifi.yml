@@ -1,0 +1,132 @@
+---
+# UniFi Network Controller migration target.
+#
+# Step 1 of the migration: stand up controller at the SAME major.minor as
+# fiordland (7.1.x) so the .unf-equivalent data restore works cleanly.
+# Subsequent upgrades (7.1 → 7.5 → 8.0 → 8.6 → 9.x) are done by bumping
+# unifi_version below and re-running this playbook.
+#
+# Initial restore: once the controller is up, upload the most recent
+# `.unf` autobackup at https://unifi.example.com:8443 → Settings →
+# Backup → Restore. Then re-point each adopted device's inform URL at
+# https://unifi.example.com:8080/inform.
+#
+# Container uses host networking — UniFi APs use L2 broadcast for discovery,
+# which port-mapping breaks. LXC must have nesting=1.
+- name: Install UniFi Network Controller
+  hosts: all
+  become: true
+
+  vars:
+    unifi_version: "v7.1.66"
+    unifi_image: "jacobalberty/unifi"
+    unifi_dir: /opt/unifi
+
+  tasks:
+    - name: Install Docker prerequisites
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+        state: present
+        update_cache: true
+
+    - name: Add Docker apt repository
+      ansible.builtin.deb822_repository:
+        name: docker
+        types: deb
+        uris: https://download.docker.com/linux/debian
+        suites: "{{ ansible_distribution_release }}"
+        components: stable
+        signed_by: https://download.docker.com/linux/debian/gpg
+        state: present
+
+    - name: Install Docker
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Enable and start Docker
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Create unifi base directory
+      ansible.builtin.file:
+        path: "{{ unifi_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0750'
+
+    - name: Ensure data and logs subdirs exist
+      ansible.builtin.file:
+        path: "{{ unifi_dir }}/{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0750'
+      loop:
+        - data
+        - logs
+
+    - name: Deploy docker-compose.yml
+      ansible.builtin.copy:
+        dest: "{{ unifi_dir }}/docker-compose.yml"
+        owner: root
+        group: root
+        mode: '0640'
+        content: |
+          services:
+            unifi:
+              image: {{ unifi_image }}:${UNIFI_TAG}
+              container_name: unifi
+              restart: unless-stopped
+              network_mode: host
+              environment:
+                TZ: America/New_York
+                ENABLE_LOCAL_MONGO: "true"
+                RUNAS_UID0: "true"
+                BIND_PRIV: "false"
+              volumes:
+                - {{ unifi_dir }}/data:/unifi/data
+                - {{ unifi_dir }}/logs:/unifi/log
+              ulimits:
+                nofile:
+                  soft: 1024
+                  hard: 65535
+
+    - name: Write .env with current image tag
+      ansible.builtin.copy:
+        dest: "{{ unifi_dir }}/.env"
+        owner: root
+        group: root
+        mode: '0640'
+        content: |
+          UNIFI_TAG={{ unifi_version }}
+
+    - name: Pull image
+      community.docker.docker_compose_v2_pull:
+        project_src: "{{ unifi_dir }}"
+
+    - name: Start UniFi controller
+      community.docker.docker_compose_v2:
+        project_src: "{{ unifi_dir }}"
+        state: present
+
+    - name: Wait for UniFi UI to be reachable
+      ansible.builtin.uri:
+        url: https://localhost:8443/status
+        validate_certs: false
+        status_code: 200
+      register: ui_check
+      until: ui_check.status == 200
+      retries: 30
+      delay: 10

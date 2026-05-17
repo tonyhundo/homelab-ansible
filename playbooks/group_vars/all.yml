@@ -29,5 +29,8 @@ snmp_v3_password: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/snm
 authentik_pg_password: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/authentik', engine_mount_point='kv', auth_method='approle').data.data.pg_password }}"
 authentik_secret_key: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/authentik', engine_mount_point='kv', auth_method='approle').data.data.secret_key }}"
 
+smtp_user: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/smtp', engine_mount_point='kv', auth_method='approle').data.data.username }}"
+smtp_password: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/smtp', engine_mount_point='kv', auth_method='approle').data.data.password }}"
+
 gamefeed_db_password: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/gamefeed', engine_mount_point='kv', auth_method='approle').data.data.db_password }}"
 gamefeed_worker_token: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/gamefeed', engine_mount_point='kv', auth_method='approle').data.data.worker_token }}"
