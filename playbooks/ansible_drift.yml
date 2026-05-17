@@ -125,6 +125,7 @@
   gather_facts: false
   vars:
     n8n_db: /var/lib/n8n/.n8n/database.sqlite
+    marker_dir: /var/lib/n8n/.ansible-drift
     drift_key_path: /var/lib/n8n/.ssh/ansible_drift_id_ed25519
     cred_name: "Emperor SSH (Drift)"
     smtp_cred_name: "Gmail SMTP (Drift)"
@@ -140,6 +141,16 @@
         state: present
         update_cache: true
         cache_valid_time: 3600
+
+    - name: Ensure marker directory exists
+      ansible.builtin.file:
+        path: "{{ marker_dir }}"
+        state: directory
+        owner: n8n
+        group: n8n
+        mode: "0700"
+
+    # --- Drift SSH credential ---
 
     - name: Look up existing credential id (if any)
       ansible.builtin.command:
@@ -162,39 +173,68 @@
       register: drift_key
       no_log: true
 
-    - name: Render credential JSON to a tempfile
-      ansible.builtin.tempfile:
-        state: file
-        suffix: ".json"
-      register: cred_tmp
-
-    - name: Write credential JSON
-      ansible.builtin.template:
-        src: n8n_ansible_drift_credential.json.j2
-        dest: "{{ cred_tmp.path }}"
-        owner: n8n
-        group: n8n
-        mode: "0600"
+    - name: Render credential JSON in memory
+      ansible.builtin.set_fact:
+        cred_content: "{{ lookup('template', 'n8n_ansible_drift_credential.json.j2') }}"
       vars:
         cred_private_key: "{{ drift_key.content | b64decode }}"
       no_log: true
 
-    - name: Import credential into n8n
-      ansible.builtin.command:
-        argv:
-          - sudo
-          - "-u"
-          - n8n
-          - n8n
-          - "import:credentials"
-          - "--input={{ cred_tmp.path }}"
-      register: cred_import
-      changed_when: "'Successfully imported' in cred_import.stdout"
+    - name: Read existing credential marker
+      ansible.builtin.slurp:
+        src: "{{ marker_dir }}/cred.sha256"
+      register: cred_marker
+      failed_when: false
+      changed_when: false
 
-    - name: Remove credential tempfile
-      ansible.builtin.file:
-        path: "{{ cred_tmp.path }}"
-        state: absent
+    - name: Decide whether credential needs import
+      ansible.builtin.set_fact:
+        cred_needs_import: >-
+          {{ (cred_marker.content | default('') | b64decode | trim)
+             != (cred_content | hash('sha256')) }}
+
+    - name: Import credential when content has changed
+      when: cred_needs_import
+      block:
+        - name: Render credential JSON to tempfile
+          ansible.builtin.tempfile:
+            state: file
+            suffix: ".json"
+          register: cred_tmp
+
+        - name: Write credential JSON to tempfile
+          ansible.builtin.copy:
+            content: "{{ cred_content }}"
+            dest: "{{ cred_tmp.path }}"
+            owner: n8n
+            group: n8n
+            mode: "0600"
+          no_log: true
+
+        - name: Import credential into n8n
+          ansible.builtin.command:
+            argv:
+              - sudo
+              - "-u"
+              - n8n
+              - n8n
+              - "import:credentials"
+              - "--input={{ cred_tmp.path }}"
+          register: cred_import
+          changed_when: "'Successfully imported' in cred_import.stdout"
+
+        - name: Remove credential tempfile
+          ansible.builtin.file:
+            path: "{{ cred_tmp.path }}"
+            state: absent
+
+        - name: Update credential marker
+          ansible.builtin.copy:
+            content: "{{ cred_content | hash('sha256') }}"
+            dest: "{{ marker_dir }}/cred.sha256"
+            owner: n8n
+            group: n8n
+            mode: "0600"
 
     - name: Re-read credential id after import
       ansible.builtin.command:
@@ -231,37 +271,66 @@
           {{ (smtp_cred_lookup.stdout | trim)
              or (lookup('password', '/dev/null length=16 chars=ascii_letters,digits')) }}
 
-    - name: Render SMTP credential JSON to a tempfile
-      ansible.builtin.tempfile:
-        state: file
-        suffix: ".json"
-      register: smtp_cred_tmp
-
-    - name: Write SMTP credential JSON
-      ansible.builtin.template:
-        src: n8n_ansible_drift_smtp_credential.json.j2
-        dest: "{{ smtp_cred_tmp.path }}"
-        owner: n8n
-        group: n8n
-        mode: "0600"
+    - name: Render SMTP credential JSON in memory
+      ansible.builtin.set_fact:
+        smtp_cred_content: "{{ lookup('template', 'n8n_ansible_drift_smtp_credential.json.j2') }}"
       no_log: true
 
-    - name: Import SMTP credential into n8n
-      ansible.builtin.command:
-        argv:
-          - sudo
-          - "-u"
-          - n8n
-          - n8n
-          - "import:credentials"
-          - "--input={{ smtp_cred_tmp.path }}"
-      register: smtp_cred_import
-      changed_when: "'Successfully imported' in smtp_cred_import.stdout"
+    - name: Read existing SMTP credential marker
+      ansible.builtin.slurp:
+        src: "{{ marker_dir }}/smtp_cred.sha256"
+      register: smtp_cred_marker
+      failed_when: false
+      changed_when: false
 
-    - name: Remove SMTP credential tempfile
-      ansible.builtin.file:
-        path: "{{ smtp_cred_tmp.path }}"
-        state: absent
+    - name: Decide whether SMTP credential needs import
+      ansible.builtin.set_fact:
+        smtp_cred_needs_import: >-
+          {{ (smtp_cred_marker.content | default('') | b64decode | trim)
+             != (smtp_cred_content | hash('sha256')) }}
+
+    - name: Import SMTP credential when content has changed
+      when: smtp_cred_needs_import
+      block:
+        - name: Render SMTP credential JSON to tempfile
+          ansible.builtin.tempfile:
+            state: file
+            suffix: ".json"
+          register: smtp_cred_tmp
+
+        - name: Write SMTP credential JSON to tempfile
+          ansible.builtin.copy:
+            content: "{{ smtp_cred_content }}"
+            dest: "{{ smtp_cred_tmp.path }}"
+            owner: n8n
+            group: n8n
+            mode: "0600"
+          no_log: true
+
+        - name: Import SMTP credential into n8n
+          ansible.builtin.command:
+            argv:
+              - sudo
+              - "-u"
+              - n8n
+              - n8n
+              - "import:credentials"
+              - "--input={{ smtp_cred_tmp.path }}"
+          register: smtp_cred_import
+          changed_when: "'Successfully imported' in smtp_cred_import.stdout"
+
+        - name: Remove SMTP credential tempfile
+          ansible.builtin.file:
+            path: "{{ smtp_cred_tmp.path }}"
+            state: absent
+
+        - name: Update SMTP credential marker
+          ansible.builtin.copy:
+            content: "{{ smtp_cred_content | hash('sha256') }}"
+            dest: "{{ marker_dir }}/smtp_cred.sha256"
+            owner: n8n
+            group: n8n
+            mode: "0600"
 
     - name: Re-read SMTP credential id after import
       ansible.builtin.command:
@@ -281,43 +350,75 @@
         msg: "credential '{{ smtp_cred_name }}' not found in n8n db after import"
       when: smtp_cred_final_id | length == 0
 
-    - name: Render workflow JSON to a tempfile
-      ansible.builtin.tempfile:
-        state: file
-        suffix: ".json"
-      register: wf_tmp
+    # --- Workflow ---
 
-    - name: Write workflow JSON
-      ansible.builtin.template:
-        src: n8n_ansible_drift_workflow.json.j2
-        dest: "{{ wf_tmp.path }}"
-        owner: n8n
-        group: n8n
-        mode: "0600"
+    - name: Render workflow JSON in memory
+      ansible.builtin.set_fact:
+        wf_content: "{{ lookup('template', 'n8n_ansible_drift_workflow.json.j2') }}"
 
-    - name: Import workflow into n8n
-      ansible.builtin.command:
-        argv:
-          - sudo
-          - "-u"
-          - n8n
-          - n8n
-          - "import:workflow"
-          - "--input={{ wf_tmp.path }}"
-      register: wf_import
-      changed_when: "'Successfully imported' in wf_import.stdout"
+    - name: Read existing workflow marker
+      ansible.builtin.slurp:
+        src: "{{ marker_dir }}/workflow.sha256"
+      register: wf_marker
+      failed_when: false
+      changed_when: false
 
-    - name: Remove workflow tempfile
-      ansible.builtin.file:
-        path: "{{ wf_tmp.path }}"
-        state: absent
+    - name: Decide whether workflow needs import
+      ansible.builtin.set_fact:
+        wf_needs_import: >-
+          {{ (wf_marker.content | default('') | b64decode | trim)
+             != (wf_content | hash('sha256')) }}
 
-    - name: Look up workflow id
+    - name: Import workflow when content has changed
+      when: wf_needs_import
+      block:
+        - name: Render workflow JSON to tempfile
+          ansible.builtin.tempfile:
+            state: file
+            suffix: ".json"
+          register: wf_tmp
+
+        - name: Write workflow JSON to tempfile
+          ansible.builtin.copy:
+            content: "{{ wf_content }}"
+            dest: "{{ wf_tmp.path }}"
+            owner: n8n
+            group: n8n
+            mode: "0600"
+
+        - name: Import workflow into n8n
+          ansible.builtin.command:
+            argv:
+              - sudo
+              - "-u"
+              - n8n
+              - n8n
+              - "import:workflow"
+              - "--input={{ wf_tmp.path }}"
+          register: wf_import
+          changed_when: "'Successfully imported' in wf_import.stdout"
+
+        - name: Remove workflow tempfile
+          ansible.builtin.file:
+            path: "{{ wf_tmp.path }}"
+            state: absent
+
+        - name: Update workflow marker
+          ansible.builtin.copy:
+            content: "{{ wf_content | hash('sha256') }}"
+            dest: "{{ marker_dir }}/workflow.sha256"
+            owner: n8n
+            group: n8n
+            mode: "0600"
+
+    - name: Look up workflow id and active state
       ansible.builtin.command:
         argv:
           - sqlite3
+          - "-separator"
+          - "|"
           - "{{ n8n_db }}"
-          - "SELECT id FROM workflow_entity WHERE name = '{{ workflow_name }}' ORDER BY updatedAt DESC LIMIT 1"
+          - "SELECT id, active FROM workflow_entity WHERE name = '{{ workflow_name }}' ORDER BY updatedAt DESC LIMIT 1"
       register: wf_lookup
       changed_when: false
 
@@ -326,7 +427,12 @@
         msg: "workflow '{{ workflow_name }}' not found in n8n db after import"
       when: wf_lookup.stdout | trim | length == 0
 
-    - name: Activate workflow
+    - name: Parse workflow id and active flag
+      ansible.builtin.set_fact:
+        wf_id: "{{ (wf_lookup.stdout | trim).split('|')[0] }}"
+        wf_already_active: "{{ (wf_lookup.stdout | trim).split('|')[1] in ['1', 'true'] }}"
+
+    - name: Activate workflow (only if not already active)
       ansible.builtin.command:
         argv:
           - sudo
@@ -334,7 +440,8 @@
           - n8n
           - n8n
           - "update:workflow"
-          - "--id={{ wf_lookup.stdout | trim }}"
+          - "--id={{ wf_id }}"
           - "--active=true"
       register: wf_activate
-      changed_when: "'1' in wf_activate.stdout"
+      changed_when: true
+      when: not wf_already_active
