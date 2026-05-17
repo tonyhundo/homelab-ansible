@@ -445,3 +445,29 @@
       register: wf_activate
       changed_when: true
       when: not wf_already_active
+
+    - name: Find duplicate workflows with same name
+      ansible.builtin.command:
+        argv:
+          - sqlite3
+          - "{{ n8n_db }}"
+          - "SELECT id FROM workflow_entity WHERE name = '{{ workflow_name }}' AND id != '{{ wf_id }}'"
+      register: wf_duplicates
+      changed_when: false
+
+    - name: Delete duplicate workflow rows
+      ansible.builtin.command:
+        argv:
+          - sqlite3
+          - "{{ n8n_db }}"
+          - "DELETE FROM workflow_entity WHERE name = '{{ workflow_name }}' AND id != '{{ wf_id }}'"
+      when: wf_duplicates.stdout | trim | length > 0
+      register: wf_dedupe
+      changed_when: wf_duplicates.stdout | trim | length > 0
+      notify: Restart n8n
+  handlers:
+    - name: Restart n8n
+      ansible.builtin.systemd:
+        name: n8n
+        state: restarted
+      become: true
