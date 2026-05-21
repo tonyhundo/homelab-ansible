@@ -124,6 +124,17 @@
         - { option: cert_key, value: /etc/ssl/example/key.pem }
       notify: Restart grafana
 
+    - name: Set Homelab Overview as the default home dashboard
+      ansible.builtin.ini_file:
+        path: /etc/grafana/grafana.ini
+        section: dashboards
+        option: default_home_dashboard_path
+        value: /var/lib/grafana/dashboards/homelab-overview.json
+        mode: '0640'
+        owner: root
+        group: grafana
+      notify: Restart grafana
+
     - name: Enable and start grafana
       ansible.builtin.systemd:
         name: grafana-server

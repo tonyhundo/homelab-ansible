@@ -63,6 +63,15 @@
         mode: "0755"
       become: true
 
+    - name: Install terraform-drift.sh
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../scripts/terraform-drift.sh"
+        dest: /usr/local/bin/terraform-drift.sh
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+
 - name: Ensure n8n → emperor SSH key for drift job
   hosts: n8n.example.com
   become: true

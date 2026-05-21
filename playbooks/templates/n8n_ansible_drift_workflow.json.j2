@@ -19,6 +19,48 @@
       "parameters": {
         "authentication": "privateKey",
         "resource": "command",
+        "command": "/usr/local/bin/terraform-drift.sh",
+        "cwd": "/home/admin/homelab/terraform"
+      },
+      "id": "run-tf-plan",
+      "name": "Run Terraform Plan",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [400, 300],
+      "credentials": {
+        "sshPrivateKey": {
+          "id": {{ cred_final_id | to_json }},
+          "name": {{ cred_name | to_json }}
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "tfc1",
+              "leftValue": "={{ '{{' }} $json.code {{ '}}' }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "tf-branch",
+      "name": "Plan OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "privateKey",
+        "resource": "command",
         "command": "/usr/local/bin/ansible-drift.sh",
         "cwd": "/home/admin"
       },
@@ -26,7 +68,7 @@
       "name": "Run Ansible on Emperor",
       "type": "n8n-nodes-base.ssh",
       "typeVersion": 1,
-      "position": [440, 300],
+      "position": [800, 200],
       "credentials": {
         "sshPrivateKey": {
           "id": {{ cred_final_id | to_json }},
@@ -55,7 +97,7 @@
       "name": "Succeeded?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [680, 300]
+      "position": [1000, 200]
     },
     {
       "parameters": {
@@ -72,7 +114,7 @@
       "name": "Mark Success",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [920, 200]
+      "position": [1200, 120]
     },
     {
       "parameters": {
@@ -90,7 +132,25 @@
       "name": "Mark Failure",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [920, 400]
+      "position": [1200, 280]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "tf1", "name": "status",   "type": "string", "value": "={{ '{{' }} $('Run Terraform Plan').item.json.code === 2 ? 'DRIFT' : 'FAILED' {{ '}}' }}" },
+            { "id": "tf2", "name": "summary",  "type": "string", "value": "={{ '{{' }} $('Run Terraform Plan').item.json.stdout {{ '}}' }}" },
+            { "id": "tf3", "name": "stderr",   "type": "string", "value": "={{ '{{' }} $('Run Terraform Plan').item.json.stderr {{ '}}' }}" },
+            { "id": "tf4", "name": "exitCode", "type": "number", "value": "={{ '{{' }} $('Run Terraform Plan').item.json.code {{ '}}' }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "tf-fail-set",
+      "name": "Mark TF Failure",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [800, 460]
     },
     {
       "parameters": {
@@ -105,7 +165,7 @@
       "name": "Email Success",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [1160, 200],
+      "position": [1440, 120],
       "credentials": {
         "smtp": {
           "id": {{ smtp_cred_final_id | to_json }},
@@ -126,7 +186,28 @@
       "name": "Email Failure",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [1160, 400],
+      "position": [1440, 280],
+      "credentials": {
+        "smtp": {
+          "id": {{ smtp_cred_final_id | to_json }},
+          "name": {{ smtp_cred_name | to_json }}
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": {{ smtp_from | to_json }},
+        "toEmail": {{ smtp_to | to_json }},
+        "subject": "=[ansible-drift] terraform plan {{ '{{' }} $json.status {{ '}}' }}",
+        "emailFormat": "text",
+        "text": "=Terraform plan reported {{ '{{' }} $json.status {{ '}}' }} on emperor (ansible was NOT applied).\n\nExit code: {{ '{{' }} $json.exitCode {{ '}}' }} (0=clean, 1=error, 2=drift)\n\n----- plan stdout -----\n{{ '{{' }} $json.summary {{ '}}' }}\n\n----- stderr -----\n{{ '{{' }} $json.stderr {{ '}}' }}\n",
+        "options": {}
+      },
+      "id": "email-tf-failure",
+      "name": "Email TF Failure",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1040, 460],
       "credentials": {
         "smtp": {
           "id": {{ smtp_cred_final_id | to_json }},
@@ -136,14 +217,20 @@
     }
   ],
   "connections": {
-    "Daily 04:00":             { "main": [[{ "node": "Run Ansible on Emperor", "type": "main", "index": 0 }]] },
+    "Daily 04:00":             { "main": [[{ "node": "Run Terraform Plan",    "type": "main", "index": 0 }]] },
+    "Run Terraform Plan":      { "main": [[{ "node": "Plan OK?",              "type": "main", "index": 0 }]] },
+    "Plan OK?":                { "main": [
+                                  [{ "node": "Run Ansible on Emperor", "type": "main", "index": 0 }],
+                                  [{ "node": "Mark TF Failure",        "type": "main", "index": 0 }]
+                                ] },
     "Run Ansible on Emperor":  { "main": [[{ "node": "Succeeded?",             "type": "main", "index": 0 }]] },
     "Succeeded?":              { "main": [
                                   [{ "node": "Mark Success", "type": "main", "index": 0 }],
                                   [{ "node": "Mark Failure", "type": "main", "index": 0 }]
                                 ] },
-    "Mark Success":            { "main": [[{ "node": "Email Success", "type": "main", "index": 0 }]] },
-    "Mark Failure":            { "main": [[{ "node": "Email Failure", "type": "main", "index": 0 }]] }
+    "Mark Success":            { "main": [[{ "node": "Email Success",     "type": "main", "index": 0 }]] },
+    "Mark Failure":            { "main": [[{ "node": "Email Failure",     "type": "main", "index": 0 }]] },
+    "Mark TF Failure":         { "main": [[{ "node": "Email TF Failure",  "type": "main", "index": 0 }]] }
   },
   "settings": { "executionOrder": "v1" },
   "active": false
