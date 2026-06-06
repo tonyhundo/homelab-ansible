@@ -3,7 +3,7 @@
   hosts: prometheus
   become: true
   vars:
-    prometheus_version: "2.51.0"
+    prometheus_version: "3.12.0"
 
   tasks:
     - name: Create prometheus system user
@@ -48,17 +48,9 @@
         - prometheus
         - promtool
 
-    - name: Copy console files
-      ansible.builtin.copy:
-        src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
-        dest: /etc/prometheus/
-        owner: prometheus
-        group: prometheus
-        remote_src: true
-      loop:
-        - consoles
-        - console_libraries
-
+    # Prometheus 3.x no longer bundles consoles/console_libraries in the
+    # release tarball, and the --web.console.* flags below were removed with
+    # them. (See https://prometheus.io/docs/prometheus/3.4/migration/)
     - name: Configure prometheus
       ansible.builtin.copy:
         dest: /etc/prometheus/prometheus.yml
@@ -215,8 +207,6 @@
           ExecStart=/usr/local/bin/prometheus \
             --config.file=/etc/prometheus/prometheus.yml \
             --storage.tsdb.path=/var/lib/prometheus/ \
-            --web.console.templates=/etc/prometheus/consoles \
-            --web.console.libraries=/etc/prometheus/console_libraries \
             --web.enable-admin-api \
             --web.config.file=/etc/prometheus/web.yml
           Restart=on-failure

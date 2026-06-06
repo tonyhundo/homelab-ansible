@@ -3,7 +3,7 @@
   hosts: pihole
   become: true
   vars:
-    dnscrypt_version: "2.1.5"
+    dnscrypt_version: "2.1.16"
 
   tasks:
     - name: Check if dnscrypt-proxy is already installed

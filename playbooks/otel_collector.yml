@@ -12,7 +12,7 @@
   hosts: desktop
   become: true
   vars:
-    otelcol_version: "0.111.0"
+    otelcol_version: "0.153.0"
     otelcol_endpoint_http: "0.0.0.0:4318"
     otelcol_prom_endpoint: "0.0.0.0:8889"
 

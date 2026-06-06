@@ -3,7 +3,7 @@
   hosts: all
   become: true
   vars:
-    step_version: "0.28.3"
+    step_version: "0.30.2"
     ca_name: "SeaMammals CA"
     ca_dns: "stepca.example.com"
     ca_address: ":8443"

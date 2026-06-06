@@ -4,7 +4,7 @@
   become: true
 
   vars:
-    gitea_version: "1.25.5"
+    gitea_version: "1.26.2"
     gitea_domain: "{{ inventory_hostname }}"
     gitea_http_port: 3000
 

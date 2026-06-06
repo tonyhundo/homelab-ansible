@@ -1,0 +1,56 @@
+---
+# Manage the Pi-hole core installation on the pihole host (192.0.2.15).
+#
+# Pi-hole is a pre-existing standalone host that was historically upgraded by
+# hand. This playbook brings it under Ansible: it installs Pi-hole unattended if
+# absent, and otherwise upgrades it to the latest release on its channel via
+# `pihole -up`.
+#
+# NOTE: Pi-hole's own tooling cannot pin an arbitrary version tag — `pihole -up`
+# always moves to the latest release on the configured channel. So
+# pihole_target_version is a *documentation marker* of the release we last
+# validated against; the guard below skips the upgrade once the running version
+# already matches it, which keeps re-runs idempotent and prevents churn.
+#
+# Pi-hole's DNS records and Prometheus exporter are managed separately by
+# pihole_dns.yml and pihole_exporter.yml respectively.
+- name: Manage Pi-hole core
+  hosts: pihole
+  become: true
+  vars:
+    pihole_target_version: "6.4.2"
+
+  tasks:
+    - name: Check whether pihole is installed
+      ansible.builtin.stat:
+        path: /usr/local/bin/pihole
+      register: pihole_bin
+
+    - name: Install Pi-hole unattended (only if absent)
+      when: not pihole_bin.stat.exists
+      block:
+        - name: Download Pi-hole installer
+          ansible.builtin.get_url:
+            url: https://install.pi-hole.net
+            dest: /tmp/pihole-install.sh
+            mode: '0755'
+
+        - name: Run Pi-hole unattended installer
+          ansible.builtin.command: bash /tmp/pihole-install.sh --unattended
+          # Only invoked on a host with no existing Pi-hole; always a change.
+          changed_when: true
+
+    - name: Get installed Pi-hole core version
+      ansible.builtin.command: pihole -v
+      register: pihole_version_out
+      changed_when: false
+
+    - name: Show detected Pi-hole version
+      ansible.builtin.debug:
+        var: pihole_version_out.stdout
+
+    - name: Upgrade Pi-hole to latest release on channel
+      ansible.builtin.command: pihole -up
+      register: pihole_up
+      when: pihole_target_version not in pihole_version_out.stdout
+      changed_when: true
