@@ -26,19 +26,33 @@
         path: /usr/local/bin/step
       register: step_cli_bin
 
+    - name: Get installed step-cli version
+      ansible.builtin.command: /usr/local/bin/step version
+      register: step_installed_version
+      changed_when: false
+      failed_when: false
+      when: step_cli_bin.stat.exists
+
+    # Install when absent OR when the running CLI doesn't match step_version,
+    # so a version bump actually upgrades the client (the old guard checked only
+    # for existence and silently skipped upgrades).
+    - name: Determine whether step-cli needs install
+      ansible.builtin.set_fact:
+        step_cli_needs_install: "{{ (not step_cli_bin.stat.exists) or (step_version not in (step_installed_version.stdout | default(''))) }}"
+
     - name: Download step-cli
       ansible.builtin.get_url:
         url: "https://dl.smallstep.com/gh-release/cli/gh-release-header/v{{ step_version }}/step_linux_{{ step_version }}_amd64.tar.gz"
         dest: "/tmp/step_cli-{{ step_version }}.tar.gz"
         mode: '0644'
-      when: not step_cli_bin.stat.exists
+      when: step_cli_needs_install
 
     - name: Extract step-cli
       ansible.builtin.unarchive:
         src: "/tmp/step_cli-{{ step_version }}.tar.gz"
         dest: /tmp/
         remote_src: true
-      when: not step_cli_bin.stat.exists
+      when: step_cli_needs_install
 
     - name: Install step-cli binary
       ansible.builtin.copy:
@@ -48,7 +62,7 @@
         group: root
         mode: '0755'
         remote_src: true
-      when: not step_cli_bin.stat.exists
+      when: step_cli_needs_install
 
     - name: Copy root CA to system trust store
       ansible.builtin.copy:
@@ -196,7 +210,7 @@
       ansible.builtin.file:
         path: "/tmp/step_cli-{{ step_version }}.tar.gz"
         state: absent
-      when: not step_cli_bin.stat.exists
+      when: step_cli_needs_install
 
   handlers:
     - name: Update CA certificates

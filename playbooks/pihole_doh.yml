@@ -6,24 +6,21 @@
     dnscrypt_version: "2.1.16"
 
   tasks:
-    - name: Check if dnscrypt-proxy is already installed
-      ansible.builtin.stat:
-        path: /usr/local/bin/dnscrypt-proxy
-      register: dnscrypt_bin
-
+    # Version-pinned download + idempotent copy: bumping dnscrypt_version
+    # re-fetches and re-installs the new binary (the copy only reports changed
+    # when the bytes differ, which then triggers the restart handler). A guard
+    # on mere existence would skip upgrades entirely.
     - name: Download dnscrypt-proxy
       ansible.builtin.get_url:
         url: "https://github.com/DNSCrypt/dnscrypt-proxy/releases/download/{{ dnscrypt_version }}/dnscrypt-proxy-linux_x86_64-{{ dnscrypt_version }}.tar.gz"
         dest: "/tmp/dnscrypt-proxy-{{ dnscrypt_version }}.tar.gz"
         mode: '0644'
-      when: not dnscrypt_bin.stat.exists
 
     - name: Extract dnscrypt-proxy
       ansible.builtin.unarchive:
         src: "/tmp/dnscrypt-proxy-{{ dnscrypt_version }}.tar.gz"
         dest: /tmp/
         remote_src: true
-      when: not dnscrypt_bin.stat.exists
 
     - name: Install dnscrypt-proxy binary
       ansible.builtin.copy:
@@ -33,13 +30,12 @@
         group: root
         mode: '0755'
         remote_src: true
-      when: not dnscrypt_bin.stat.exists
+      notify: Restart dnscrypt-proxy
 
     - name: Clean up dnscrypt-proxy tarball
       ansible.builtin.file:
         path: "/tmp/dnscrypt-proxy-{{ dnscrypt_version }}.tar.gz"
         state: absent
-      when: not dnscrypt_bin.stat.exists
 
     - name: Create dnscrypt-proxy system user
       ansible.builtin.user:
