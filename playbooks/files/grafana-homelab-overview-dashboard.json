@@ -1102,7 +1102,7 @@
                       },
                       "1": {
                         "text": "Outdated",
-                        "color": "orange",
+                        "color": "red",
                         "index": 1
                       }
                     }
@@ -1280,7 +1280,14 @@
               "instance 3": true,
               "instance 4": true,
               "instance 5": true,
-              "instance 6": true
+              "instance 6": true,
+              "exported_instance 1": true,
+              "exported_instance 2": true,
+              "exported_instance 3": true,
+              "exported_instance 4": true,
+              "exported_instance 5": true,
+              "exported_instance 6": true,
+              "exported_instance": true
             },
             "renameByName": {
               "service": "Service",
