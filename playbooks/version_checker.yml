@@ -1,0 +1,112 @@
+---
+- name: Deploy homelab version compliance checker
+  hosts: prometheus
+  become: true
+
+  tasks:
+    - name: Create textfile collector directory
+      ansible.builtin.file:
+        path: /var/lib/node_exporter/textfile
+        state: directory
+        owner: node_exporter
+        group: node_exporter
+        mode: '0755'
+
+    - name: Create node_exporter systemd drop-in dir
+      ansible.builtin.file:
+        path: /etc/systemd/system/node_exporter.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Enable textfile collector on node_exporter
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/node_exporter.service.d/textfile.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Service]
+          ExecStart=
+          ExecStart=/usr/local/bin/node_exporter --collector.textfile.directory=/var/lib/node_exporter/textfile
+      notify: Restart node_exporter
+
+    - name: Install check_versions.py
+      ansible.builtin.copy:
+        src: files/check_versions.py
+        dest: /usr/local/bin/check_versions.py
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Install version-checker systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/homelab-version-check.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Homelab software version compliance check
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=oneshot
+          User=node_exporter
+          Group=node_exporter
+          ExecStart=/usr/local/bin/check_versions.py
+          Nice=10
+      notify: Reload systemd
+
+    - name: Install version-checker systemd timer
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/homelab-version-check.timer
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Run homelab version check hourly
+
+          [Timer]
+          OnBootSec=5min
+          OnUnitActiveSec=1h
+          Unit=homelab-version-check.service
+
+          [Install]
+          WantedBy=timers.target
+      notify: Reload systemd
+
+    - name: Flush handlers so reload + restart happen before first run
+      ansible.builtin.meta: flush_handlers
+
+    - name: Enable and start version-checker timer
+      ansible.builtin.systemd:
+        name: homelab-version-check.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Run version checker once on apply
+      ansible.builtin.systemd:
+        name: homelab-version-check.service
+        state: started
+
+    - name: Wait for textfile to appear
+      ansible.builtin.wait_for:
+        path: /var/lib/node_exporter/textfile/homelab_versions.prom
+        state: present
+        timeout: 60
+
+  handlers:
+    - name: Restart node_exporter
+      ansible.builtin.systemd:
+        name: node_exporter
+        state: restarted
+        daemon_reload: true
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true

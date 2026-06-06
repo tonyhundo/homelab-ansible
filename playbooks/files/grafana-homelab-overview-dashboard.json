@@ -752,184 +752,6 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 25
-      },
-      "id": 300,
-      "title": "Lifecycle \u2014 VMs & Containers",
-      "type": "table",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "displayMode": "auto"
-          },
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "transparent",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "OS"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "regex",
-                    "options": {
-                      "pattern": ".*trixie.*",
-                      "result": {
-                        "color": "green",
-                        "index": 0
-                      }
-                    }
-                  },
-                  {
-                    "type": "regex",
-                    "options": {
-                      "pattern": ".*bookworm.*",
-                      "result": {
-                        "color": "yellow",
-                        "index": 1
-                      }
-                    }
-                  }
-                ]
-              },
-              {
-                "id": "custom.displayMode",
-                "value": "color-background"
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "showHeader": true,
-        "footer": {
-          "show": false
-        },
-        "sortBy": [
-          {
-            "displayName": "Instance",
-            "desc": false
-          }
-        ]
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "ds_prometheus"
-          },
-          "expr": "node_os_info{instance=~\"grafana|prometheus|pihole|gitea|mariadb|vaultwarden|docmost|stepca|n8n|authentik|gamefeed|vault|unifi\"}",
-          "format": "table",
-          "instant": true,
-          "refId": "OS"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "ds_prometheus"
-          },
-          "expr": "node_uname_info{instance=~\"grafana|prometheus|pihole|gitea|mariadb|vaultwarden|docmost|stepca|n8n|authentik|gamefeed|vault|unifi\"}",
-          "format": "table",
-          "instant": true,
-          "refId": "UNAME"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "ds_prometheus"
-          },
-          "expr": "node_exporter_build_info{instance=~\"grafana|prometheus|pihole|gitea|mariadb|vaultwarden|docmost|stepca|n8n|authentik|gamefeed|vault|unifi\"}",
-          "format": "table",
-          "instant": true,
-          "refId": "EXP"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "joinByField",
-          "options": {
-            "byField": "instance",
-            "mode": "outer"
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time 1": true,
-              "Time 2": true,
-              "Time 3": true,
-              "Value #OS": true,
-              "Value #UNAME": true,
-              "Value #EXP": true,
-              "job 1": true,
-              "job 2": true,
-              "job 3": true,
-              "__name__ 1": true,
-              "__name__ 2": true,
-              "__name__ 3": true,
-              "id": true,
-              "name": true,
-              "version_codename": true,
-              "version_id": true,
-              "domainname": true,
-              "sysname": true,
-              "nodename": true,
-              "version 2": true,
-              "branch": true,
-              "goarch": true,
-              "goos": true,
-              "goversion": true,
-              "revision": true,
-              "tags": true
-            },
-            "renameByName": {
-              "instance": "Instance",
-              "pretty_name": "OS",
-              "release": "Kernel",
-              "machine": "Arch",
-              "version 3": "node_exporter",
-              "version": "node_exporter"
-            },
-            "indexByName": {
-              "instance": 0,
-              "Instance": 0,
-              "pretty_name": 1,
-              "OS": 1,
-              "release": 2,
-              "Kernel": 2,
-              "machine": 3,
-              "Arch": 3
-            }
-          }
-        }
-      ]
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "ds_prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
         "x": 12,
         "y": 25
       },
@@ -1183,6 +1005,302 @@
           "expr": "vault_core_unsealed{instance=\"vault\"}",
           "instant": true,
           "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ds_prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "id": 300,
+      "title": "Lifecycle \u2014 VMs & Containers (compliance)",
+      "type": "table",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Supported"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "1": {
+                        "text": "Supported",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "0": {
+                        "text": "EOL",
+                        "color": "red",
+                        "index": 1
+                      },
+                      "-1": {
+                        "text": "Unknown",
+                        "color": "gray",
+                        "index": 2
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Patch Outdated"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": {
+                        "text": "Current",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "1": {
+                        "text": "Outdated",
+                        "color": "orange",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Time to EOL"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-text"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 2592000
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 7776000
+                    },
+                    {
+                      "color": "green",
+                      "value": 15552000
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "-1": {
+                        "text": "\u2014",
+                        "color": "gray",
+                        "index": 0
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Supported",
+            "desc": false
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ds_prometheus"
+          },
+          "expr": "homelab_service_running_version",
+          "format": "table",
+          "instant": true,
+          "refId": "RUN"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ds_prometheus"
+          },
+          "expr": "homelab_service_latest_patch",
+          "format": "table",
+          "instant": true,
+          "refId": "PATCH"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ds_prometheus"
+          },
+          "expr": "homelab_service_latest_major",
+          "format": "table",
+          "instant": true,
+          "refId": "MAJOR"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ds_prometheus"
+          },
+          "expr": "homelab_service_outdated_patch",
+          "format": "table",
+          "instant": true,
+          "refId": "OPATCH"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ds_prometheus"
+          },
+          "expr": "homelab_service_supported",
+          "format": "table",
+          "instant": true,
+          "refId": "SUP"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ds_prometheus"
+          },
+          "expr": "homelab_service_eol_seconds",
+          "format": "table",
+          "instant": true,
+          "refId": "EOL"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "service",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Time 4": true,
+              "Time 5": true,
+              "Time 6": true,
+              "Value #RUN": true,
+              "Value #PATCH": true,
+              "Value #MAJOR": true,
+              "__name__ 1": true,
+              "__name__ 2": true,
+              "__name__ 3": true,
+              "__name__ 4": true,
+              "__name__ 5": true,
+              "__name__ 6": true,
+              "job 1": true,
+              "job 2": true,
+              "job 3": true,
+              "job 4": true,
+              "job 5": true,
+              "job 6": true,
+              "instance 1": true,
+              "instance 2": true,
+              "instance 3": true,
+              "instance 4": true,
+              "instance 5": true,
+              "instance 6": true
+            },
+            "renameByName": {
+              "service": "Service",
+              "version 1": "Running",
+              "version 2": "Latest Patch",
+              "version 3": "Latest Major",
+              "Value #OPATCH": "Patch Outdated",
+              "Value #SUP": "Supported",
+              "Value #EOL": "Time to EOL"
+            },
+            "indexByName": {
+              "service": 0,
+              "version 1": 1,
+              "version 2": 2,
+              "Value #OPATCH": 3,
+              "version 3": 4,
+              "Value #SUP": 5,
+              "Value #EOL": 6
+            }
+          }
         }
       ]
     }
