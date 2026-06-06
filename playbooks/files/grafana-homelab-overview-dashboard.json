@@ -272,7 +272,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 25
+        "y": 33
       },
       "id": 9,
       "targets": [
@@ -303,7 +303,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 33
+        "y": 41
       },
       "id": 10,
       "targets": [
@@ -346,7 +346,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 33
+        "y": 41
       },
       "id": 11,
       "options": {
@@ -438,7 +438,7 @@
         "h": 4,
         "w": 8,
         "x": 0,
-        "y": 41
+        "y": 49
       },
       "fieldConfig": {
         "defaults": {
@@ -494,7 +494,7 @@
         "h": 4,
         "w": 8,
         "x": 8,
-        "y": 41
+        "y": 49
       },
       "fieldConfig": {
         "defaults": {
@@ -550,7 +550,7 @@
         "h": 4,
         "w": 8,
         "x": 16,
-        "y": 41
+        "y": 49
       },
       "fieldConfig": {
         "defaults": {
@@ -741,6 +741,362 @@
           "expr": "node_load1{instance=~\"chinstrap|emperor|fiordland\"} / on(instance) count by(instance) (node_cpu_seconds_total{mode=\"idle\"})",
           "legendFormat": "{{instance}}",
           "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ds_prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "id": 300,
+      "title": "Lifecycle \u2014 VMs & Containers",
+      "type": "table",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "OS"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": ".*trixie.*",
+                      "result": {
+                        "color": "green",
+                        "index": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": ".*bookworm.*",
+                      "result": {
+                        "color": "yellow",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Instance",
+            "desc": false
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ds_prometheus"
+          },
+          "expr": "node_os_info{instance=~\"grafana|prometheus|pihole|gitea|mariadb|vaultwarden|docmost|stepca|n8n|authentik|gamefeed|vault|unifi\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "OS"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ds_prometheus"
+          },
+          "expr": "node_uname_info{instance=~\"grafana|prometheus|pihole|gitea|mariadb|vaultwarden|docmost|stepca|n8n|authentik|gamefeed|vault|unifi\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "UNAME"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ds_prometheus"
+          },
+          "expr": "node_exporter_build_info{instance=~\"grafana|prometheus|pihole|gitea|mariadb|vaultwarden|docmost|stepca|n8n|authentik|gamefeed|vault|unifi\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "EXP"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "instance",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Value #OS": true,
+              "Value #UNAME": true,
+              "Value #EXP": true,
+              "job 1": true,
+              "job 2": true,
+              "job 3": true,
+              "__name__ 1": true,
+              "__name__ 2": true,
+              "__name__ 3": true,
+              "id": true,
+              "name": true,
+              "version_codename": true,
+              "version_id": true,
+              "domainname": true,
+              "sysname": true,
+              "nodename": true,
+              "version 2": true,
+              "branch": true,
+              "goarch": true,
+              "goos": true,
+              "goversion": true,
+              "revision": true,
+              "tags": true
+            },
+            "renameByName": {
+              "instance": "Instance",
+              "pretty_name": "OS",
+              "release": "Kernel",
+              "machine": "Arch",
+              "version 3": "node_exporter",
+              "version": "node_exporter"
+            },
+            "indexByName": {
+              "instance": 0,
+              "Instance": 0,
+              "pretty_name": 1,
+              "OS": 1,
+              "release": 2,
+              "Kernel": 2,
+              "machine": 3,
+              "Arch": 3
+            }
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "ds_prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "id": 301,
+      "title": "Lifecycle \u2014 Proxmox Host & Desktops",
+      "type": "table",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "OS"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": ".*trixie.*",
+                      "result": {
+                        "color": "green",
+                        "index": 0
+                      }
+                    }
+                  },
+                  {
+                    "type": "regex",
+                    "options": {
+                      "pattern": ".*bookworm.*",
+                      "result": {
+                        "color": "yellow",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "Instance",
+            "desc": false
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ds_prometheus"
+          },
+          "expr": "node_os_info{instance=~\"chinstrap|emperor|fiordland\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "OS"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ds_prometheus"
+          },
+          "expr": "node_uname_info{instance=~\"chinstrap|emperor|fiordland\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "UNAME"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "ds_prometheus"
+          },
+          "expr": "node_exporter_build_info{instance=~\"chinstrap|emperor|fiordland\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "EXP"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "instance",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Value #OS": true,
+              "Value #UNAME": true,
+              "Value #EXP": true,
+              "job 1": true,
+              "job 2": true,
+              "job 3": true,
+              "__name__ 1": true,
+              "__name__ 2": true,
+              "__name__ 3": true,
+              "id": true,
+              "name": true,
+              "version_codename": true,
+              "version_id": true,
+              "domainname": true,
+              "sysname": true,
+              "nodename": true,
+              "version 2": true,
+              "branch": true,
+              "goarch": true,
+              "goos": true,
+              "goversion": true,
+              "revision": true,
+              "tags": true
+            },
+            "renameByName": {
+              "instance": "Instance",
+              "pretty_name": "OS",
+              "release": "Kernel",
+              "machine": "Arch",
+              "version 3": "node_exporter",
+              "version": "node_exporter"
+            },
+            "indexByName": {
+              "instance": 0,
+              "Instance": 0,
+              "pretty_name": 1,
+              "OS": 1,
+              "release": 2,
+              "Kernel": 2,
+              "machine": 3,
+              "Arch": 3
+            }
+          }
         }
       ]
     }
