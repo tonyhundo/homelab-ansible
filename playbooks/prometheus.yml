@@ -163,6 +163,19 @@
                     - 'emperor.example.com:8889'
                   labels:
                     instance: 'emperor'
+
+            - job_name: 'vault'
+              scheme: https
+              tls_config:
+                insecure_skip_verify: true
+              metrics_path: /v1/sys/metrics
+              params:
+                format: ['prometheus']
+              static_configs:
+                - targets:
+                    - 'vault.example.com:8200'
+                  labels:
+                    instance: 'vault'
       notify: Restart prometheus
 
     - name: Add prometheus user to ssl-cert group

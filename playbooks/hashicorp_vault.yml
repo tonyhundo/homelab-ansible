@@ -78,6 +78,15 @@
             tls_cert_file   = "{{ cert_dir }}/cert.pem"
             tls_key_file    = "{{ cert_dir }}/key.pem"
             tls_min_version = "tls12"
+
+            telemetry {
+              unauthenticated_metrics_access = true
+            }
+          }
+
+          telemetry {
+            prometheus_retention_time = "30s"
+            disable_hostname          = true
           }
 
           api_addr     = "{{ vault_api_addr }}"
@@ -110,6 +119,26 @@
         enabled: true
         state: started
         daemon_reload: true
+
+    - name: Set VAULT_ADDR globally in /etc/environment
+      ansible.builtin.lineinfile:
+        path: /etc/environment
+        regexp: '^VAULT_ADDR='
+        line: 'VAULT_ADDR="https://vault.example.com:8200"'
+        owner: root
+        group: root
+        mode: '0644'
+        create: true
+
+    - name: Set VAULT_CACERT globally in /etc/environment
+      ansible.builtin.lineinfile:
+        path: /etc/environment
+        regexp: '^VAULT_CACERT='
+        line: 'VAULT_CACERT="{{ cert_dir }}/ca.pem"'
+        owner: root
+        group: root
+        mode: '0644'
+        create: true
 
     - name: Check Vault init/seal status
       ansible.builtin.command:
