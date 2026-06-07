@@ -17,7 +17,7 @@
       ansible.builtin.deb822_repository:
         name: nodesource
         types: deb
-        uris: https://deb.nodesource.com/node_20.x
+        uris: https://deb.nodesource.com/node_22.x
         suites: nodistro
         components: main
         signed_by: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
@@ -29,11 +29,14 @@
         state: present
         update_cache: true
 
+    # state: latest so the playbook tracks the newest n8n (rebuilding native
+    # modules such as isolated-vm against the installed Node major). n8n 2.x
+    # requires Node 22+, hence the node_22.x repo above.
     - name: Install n8n globally
       community.general.npm:
         name: n8n
         global: true
-        state: present
+        state: latest
 
     - name: Create n8n system user
       ansible.builtin.user:

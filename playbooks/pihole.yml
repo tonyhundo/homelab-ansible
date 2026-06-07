@@ -49,8 +49,11 @@
       ansible.builtin.debug:
         var: pihole_version_out.stdout
 
+    # `pihole -v` prints e.g. "Core version is v6.1.4 (Latest: v6.4.2)", so a
+    # plain substring test on the target would wrongly match the "Latest:"
+    # field. Match the running-core line specifically.
     - name: Upgrade Pi-hole to latest release on channel
       ansible.builtin.command: pihole -up
       register: pihole_up
-      when: pihole_target_version not in pihole_version_out.stdout
+      when: ('Core version is v' + pihole_target_version) not in pihole_version_out.stdout
       changed_when: true
