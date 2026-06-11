@@ -86,6 +86,7 @@
         - Restart gamefeed-worker
 
     - name: Apply database schema
+      no_log: true
       community.mysql.mysql_db:
         name: gamefeed
         login_host: "{{ gamefeed_db_host }}"
@@ -95,6 +96,7 @@
         target: "{{ gamefeed_dir }}/app/schema.sql"
 
     - name: Write gamefeed environment file
+      no_log: true
       ansible.builtin.copy:
         dest: "{{ gamefeed_etc_dir }}/env"
         owner: "{{ gamefeed_user }}"

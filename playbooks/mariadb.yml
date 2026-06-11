@@ -11,14 +11,25 @@
     gamefeed_db_host: "192.0.2.%"
 
   tasks:
-    - name: Install MariaDB server and client
+    - name: Add MariaDB official apt repository (11.8 LTS)
+      ansible.builtin.deb822_repository:
+        name: mariadb
+        types: deb
+        uris: https://mirror.mariadb.org/repo/11.8/debian
+        suites: trixie
+        components: main
+        signed_by: https://supplychain.mariadb.com/MariaDB-Server-GPG-KEY
+        state: present
+
+    - name: Install/upgrade MariaDB server and client
       ansible.builtin.apt:
         name:
           - mariadb-server
           - mariadb-client
           - python3-pymysql
-        state: present
+        state: latest  # noqa: package-latest  track latest 11.8 LTS patch
         update_cache: true
+        dpkg_options: force-confdef,force-confold
 
     - name: Enable and start MariaDB
       ansible.builtin.systemd:
@@ -42,6 +53,7 @@
         login_unix_socket: /run/mysqld/mysqld.sock
 
     - name: Create gitea database user
+      no_log: true
       community.mysql.mysql_user:
         name: "{{ gitea_db_user }}"
         password: "{{ gitea_db_password }}"
@@ -59,6 +71,7 @@
         login_unix_socket: /run/mysqld/mysqld.sock
 
     - name: Create gamefeed database user
+      no_log: true
       community.mysql.mysql_user:
         name: "{{ gamefeed_db_user }}"
         password: "{{ gamefeed_db_password }}"

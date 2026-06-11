@@ -54,6 +54,7 @@
       notify: Restart snmp_exporter
 
     - name: Add SNMPv3 auth to config
+      no_log: true
       ansible.builtin.blockinfile:
         path: /etc/snmp_exporter/snmp.yml
         insertafter: "^auths:"

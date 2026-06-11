@@ -15,6 +15,7 @@
         create_home: false
 
     - name: Create MySQL monitoring user
+      no_log: true
       community.mysql.mysql_user:
         name: "{{ mysqld_exporter_db_user }}"
         password: "{{ mysqld_exporter_db_password }}"
@@ -46,6 +47,7 @@
       notify: Restart mysqld_exporter
 
     - name: Create mysqld_exporter config
+      no_log: true
       ansible.builtin.copy:
         dest: /etc/.mysqld_exporter.cnf
         owner: mysqld_exporter

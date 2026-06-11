@@ -24,6 +24,7 @@
         mode: '0750'
 
     - name: Deploy pve_exporter config
+      no_log: true
       ansible.builtin.copy:
         dest: /etc/pve_exporter/pve.yml
         owner: root
