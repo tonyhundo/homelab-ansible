@@ -23,10 +23,13 @@
         signed_by: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
         state: present
 
+    # state: latest so a NodeSource major bump (e.g. node_20.x -> node_22.x)
+    # actually upgrades an already-installed nodejs; state: present would
+    # leave the old major in place.
     - name: Install Node.js
       ansible.builtin.apt:
         name: nodejs
-        state: present
+        state: latest  # noqa: package-latest
         update_cache: true
 
     # state: latest so the playbook tracks the newest n8n (rebuilding native

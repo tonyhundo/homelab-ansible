@@ -606,10 +606,11 @@
       "id": 203,
       "title": "Proxmox VMs & Containers \u2014 load over time (heatmap grid)",
       "type": "status-history",
+      "maxDataPoints": 100,
       "fieldConfig": {
         "defaults": {
           "min": 0,
-          "max": 2,
+          "max": 1,
           "decimals": 2,
           "unit": "short",
           "color": {
@@ -624,15 +625,15 @@
               },
               {
                 "color": "yellow",
-                "value": 0.7
+                "value": 0.25
               },
               {
                 "color": "orange",
-                "value": 1.0
+                "value": 0.5
               },
               {
                 "color": "red",
-                "value": 1.5
+                "value": 0.8
               }
             ]
           },
@@ -682,10 +683,11 @@
       "id": 204,
       "title": "Desktops & Proxmox Host \u2014 load over time (heatmap grid)",
       "type": "status-history",
+      "maxDataPoints": 100,
       "fieldConfig": {
         "defaults": {
           "min": 0,
-          "max": 2,
+          "max": 1,
           "decimals": 2,
           "unit": "short",
           "color": {
@@ -700,15 +702,15 @@
               },
               {
                 "color": "yellow",
-                "value": 0.7
+                "value": 0.25
               },
               {
                 "color": "orange",
-                "value": 1.0
+                "value": 0.5
               },
               {
                 "color": "red",
-                "value": 1.5
+                "value": 0.8
               }
             ]
           },
@@ -1086,8 +1088,12 @@
             },
             "properties": [
               {
-                "id": "custom.displayMode",
-                "value": "color-background"
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic",
+                  "applyToRow": true
+                }
               },
               {
                 "id": "mappings",
