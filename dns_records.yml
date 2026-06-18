@@ -2,6 +2,8 @@
 dns_records:
   - ip: "192.0.2.4"
     hostname: emperor.example.com
+  - ip: "192.0.2.4"
+    hostname: jellyfin.example.com
   - ip: "192.0.2.5"
     hostname: chinstrap.example.com
   - ip: "192.0.2.20"
