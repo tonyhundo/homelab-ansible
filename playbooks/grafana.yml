@@ -102,6 +102,15 @@
         mode: '0644'
       notify: Restart grafana
 
+    - name: Deploy jellyfin overview dashboard
+      ansible.builtin.copy:
+        src: files/grafana-jellyfin-dashboard.json
+        dest: /var/lib/grafana/dashboards/jellyfin-overview.json
+        owner: grafana
+        group: grafana
+        mode: '0644'
+      notify: Restart grafana
+
     - name: Remove decommissioned dashboards
       ansible.builtin.file:
         path: "/var/lib/grafana/dashboards/{{ item }}"

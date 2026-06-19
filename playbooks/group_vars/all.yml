@@ -20,6 +20,7 @@ gitea_oauth2_jwt_secret: "{{ lookup('community.hashi_vault.vault_kv2_get', 'home
 
 mysqld_exporter_db_password: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/mysqld_exporter_db', engine_mount_point='kv', auth_method='approle').data.data.password }}"
 plex_token: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/plex', engine_mount_point='kv', auth_method='approle').data.data.token }}"
+jellyfin_api_key: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/jellyfin', engine_mount_point='kv', auth_method='approle').data.data.api_key }}"
 
 pve_api_token_id: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/pve_api', engine_mount_point='kv', auth_method='approle').data.data.token_id }}"
 pve_api_token_value: "{{ lookup('community.hashi_vault.vault_kv2_get', 'homelab/pve_api', engine_mount_point='kv', auth_method='approle').data.data.token_value }}"

@@ -1,0 +1,22 @@
+---
+- name: Install Jellyfin Exporter
+  hosts: emperor
+  become: true
+
+  tasks:
+    - name: Ensure Docker is running
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Run jellyfin-exporter container
+      community.docker.docker_container:
+        name: jellyfin-exporter
+        image: rebelcore/jellyfin-exporter:latest
+        state: started
+        restart_policy: unless-stopped
+        network_mode: host
+        env:
+          JELLYFIN_ADDRESS: "http://localhost:8096"
+          JELLYFIN_TOKEN: "{{ jellyfin_api_key }}"
