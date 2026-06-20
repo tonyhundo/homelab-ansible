@@ -28,8 +28,6 @@ dns_records:
     hostname: grafana.example.com
   - ip: "192.0.2.201"
     hostname: n8n.example.com
-  - ip: "192.0.2.204"
-    hostname: authentik.example.com
   - ip: "192.0.2.205"
     hostname: gamefeed.example.com
   - ip: "192.0.2.205"

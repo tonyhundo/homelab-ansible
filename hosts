@@ -42,9 +42,6 @@ fiordland.example.com
 [n8n]
 n8n.example.com ansible_host=192.0.2.201
 
-[authentik]
-authentik.example.com ansible_host=192.0.2.204
-
 [gamefeed]
 gamefeed.example.com ansible_host=192.0.2.205
 
