@@ -8,8 +8,6 @@ dns_records:
     hostname: chinstrap.example.com
   - ip: "192.0.2.20"
     hostname: stepca.example.com
-  - ip: "192.0.2.10"
-    hostname: fiordland.example.com
   - ip: "192.0.2.15"
     hostname: pihole.example.com
   - ip: "192.0.2.37"
