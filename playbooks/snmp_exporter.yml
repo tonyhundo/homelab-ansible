@@ -1,6 +1,8 @@
 ---
 - name: Install SNMP Exporter
-  hosts: all
+  # Runs on emperor (192.0.2.4) — the poller that can reach the UniFi gear on
+  # 198.51.100.x UDP 161. Relocated here 2026-06-21 after fiordland was retired.
+  hosts: emperor
   become: true
   vars:
     snmp_exporter_version: "0.30.1"

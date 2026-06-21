@@ -115,6 +115,26 @@
                   labels:
                     instance: 'emperor'
 
+            - job_name: 'snmp'
+              scrape_interval: 30s
+              scrape_timeout: 20s
+              metrics_path: /snmp
+              params:
+                auth: ['unifi_v3']
+                module: ['if_mib']
+              static_configs:
+                - targets:
+                    - '198.51.100.1'
+                    - '198.51.100.2'
+                    - '198.51.100.3'
+              relabel_configs:
+                - source_labels: [__address__]
+                  target_label: __param_target
+                - source_labels: [__param_target]
+                  target_label: instance
+                - target_label: __address__
+                  replacement: emperor.example.com:9116
+
             - job_name: 'pve'
               metrics_path: /pve
               params:
