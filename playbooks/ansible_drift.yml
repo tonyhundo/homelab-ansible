@@ -32,12 +32,13 @@
         executable: /bin/bash
       changed_when: false
 
-    - name: Clone ansible repo (emperor is source of truth)
+    - name: Clone ansible repo and fast-forward to main
       ansible.builtin.git:
         repo: "gitea@gitea.example.com:example/ansible.git"
         dest: /home/admin/ansible
         version: main
-        update: false
+        update: true
+        force: false
         accept_hostkey: true
       become_user: admin
       become: true
