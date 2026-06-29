@@ -57,7 +57,7 @@
 
     - name: Install ansible-drift.sh
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../scripts/ansible-drift.sh"
+        src: "{{ playbook_dir }}/../../../scripts/ansible-drift.sh"
         dest: /usr/local/bin/ansible-drift.sh
         owner: root
         group: root
@@ -66,7 +66,7 @@
 
     - name: Install terraform-drift.sh
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../scripts/terraform-drift.sh"
+        src: "{{ playbook_dir }}/../../../scripts/terraform-drift.sh"
         dest: /usr/local/bin/terraform-drift.sh
         owner: root
         group: root

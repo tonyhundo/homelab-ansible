@@ -1,3 +1,3 @@
 *.swp
-playbooks/vault.yml
-playbooks/seed_secrets.yml
+playbooks/secrets/vault.yml
+playbooks/secrets/seed_secrets.yml

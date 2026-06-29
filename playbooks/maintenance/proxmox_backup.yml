@@ -64,7 +64,7 @@
 
     - name: Install proxmox-backup.sh
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../scripts/proxmox-backup.sh"
+        src: "{{ playbook_dir }}/../../../scripts/proxmox-backup.sh"
         dest: /usr/local/bin/proxmox-backup.sh
         owner: root
         group: root
