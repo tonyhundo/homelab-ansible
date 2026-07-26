@@ -753,7 +753,7 @@
     {
       "id": 15,
       "type": "piechart",
-      "title": "Library Composition (%)",
+      "title": "Library Composition (data size)",
       "datasource": {
         "type": "prometheus",
         "uid": "ds_prometheus"
@@ -769,7 +769,7 @@
           "color": {
             "mode": "palette-classic"
           },
-          "unit": "short",
+          "unit": "bytes",
           "custom": {
             "hideFrom": {
               "legend": false,
@@ -812,36 +812,9 @@
             "type": "prometheus",
             "uid": "ds_prometheus"
           },
-          "expr": "jellyfin_media_count{type=\"Song\"}",
-          "legendFormat": "Music",
+          "expr": "jellyfin_library_bytes",
+          "legendFormat": "{{library}}",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "ds_prometheus"
-          },
-          "expr": "jellyfin_media_count{type=\"Episode\"}",
-          "legendFormat": "Episodes",
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "ds_prometheus"
-          },
-          "expr": "jellyfin_media_count{type=\"Movie\"}",
-          "legendFormat": "Movies",
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "ds_prometheus"
-          },
-          "expr": "jellyfin_media_count{type=\"Series\"}",
-          "legendFormat": "TV",
-          "refId": "D"
         }
       ]
     },

@@ -1,0 +1,103 @@
+---
+- name: Deploy Jellyfin library size collector
+  hosts: emperor
+  become: true
+
+  tasks:
+    - name: Create node_exporter textfile collector directory
+      ansible.builtin.file:
+        path: /var/lib/node_exporter/textfile
+        state: directory
+        owner: node_exporter
+        group: node_exporter
+        mode: '0755'
+
+    - name: Create node_exporter systemd drop-in dir
+      ansible.builtin.file:
+        path: /etc/systemd/system/node_exporter.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Enable textfile collector on node_exporter
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/node_exporter.service.d/textfile.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Service]
+          ExecStart=
+          ExecStart=/usr/local/bin/node_exporter --collector.textfile.directory=/var/lib/node_exporter/textfile
+      notify: Restart node_exporter
+
+    - name: Install jellyfin_library_size.sh
+      ansible.builtin.copy:
+        src: files/jellyfin_library_size.sh
+        dest: /usr/local/bin/jellyfin_library_size.sh
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Install jellyfin-library-size systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/jellyfin-library-size.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Measure Jellyfin media library folder sizes for node_exporter
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/bin/jellyfin_library_size.sh
+          Nice=15
+          IOSchedulingClass=idle
+      notify: Reload systemd
+
+    - name: Install jellyfin-library-size systemd timer
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/jellyfin-library-size.timer
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Run Jellyfin library size scan daily
+
+          [Timer]
+          OnBootSec=10min
+          OnCalendar=*-*-* 04:30:00
+          Persistent=true
+          Unit=jellyfin-library-size.service
+
+          [Install]
+          WantedBy=timers.target
+      notify: Reload systemd
+
+    - name: Enable and start jellyfin-library-size timer
+      ansible.builtin.systemd:
+        name: jellyfin-library-size.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Run library size scan once now
+      ansible.builtin.systemd:
+        name: jellyfin-library-size.service
+        state: started
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Restart node_exporter
+      ansible.builtin.systemd:
+        name: node_exporter
+        state: restarted
+        daemon_reload: true
