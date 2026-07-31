@@ -1,0 +1,111 @@
+---
+# Publishes running-version metrics for apps whose port is not reachable from
+# the Prometheus host (vaultwarden, n8n, docmost). Each host reads its own
+# version locally and exposes homelab_app_running_version via node_exporter's
+# textfile collector; check_versions.py reads it back from Prometheus.
+- name: Deploy homelab app-version emitters
+  hosts: vaultwarden:n8n:docmost
+  become: true
+
+  vars:
+    emitter_services: [vaultwarden, n8n, docmost]
+
+  tasks:
+    - name: Determine this host's service key
+      ansible.builtin.set_fact:
+        app_service: "{{ (group_names | intersect(emitter_services)) | first }}"
+
+    - name: Create node_exporter textfile collector directory
+      ansible.builtin.file:
+        path: /var/lib/node_exporter/textfile
+        state: directory
+        owner: node_exporter
+        group: node_exporter
+        mode: '0755'
+
+    - name: Create node_exporter systemd drop-in dir
+      ansible.builtin.file:
+        path: /etc/systemd/system/node_exporter.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Enable textfile collector on node_exporter
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/node_exporter.service.d/textfile.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Service]
+          ExecStart=
+          ExecStart=/usr/local/bin/node_exporter --collector.textfile.directory=/var/lib/node_exporter/textfile
+      notify: Restart node_exporter
+
+    - name: Install emit_app_version.sh
+      ansible.builtin.copy:
+        src: files/emit_app_version.sh
+        dest: /usr/local/bin/emit_app_version.sh
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Install app-version-emit systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/app-version-emit.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Emit {{ app_service }} running version for node_exporter
+          After=network-online.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/bin/emit_app_version.sh {{ app_service }}
+          Nice=10
+      notify: Reload systemd
+
+    - name: Install app-version-emit systemd timer
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/app-version-emit.timer
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Refresh {{ app_service }} version metric hourly
+
+          [Timer]
+          OnBootSec=2min
+          OnUnitActiveSec=1h
+          Unit=app-version-emit.service
+
+          [Install]
+          WantedBy=timers.target
+      notify: Reload systemd
+
+    - name: Enable and start app-version-emit timer
+      ansible.builtin.systemd:
+        name: app-version-emit.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Run emitter once now
+      ansible.builtin.systemd:
+        name: app-version-emit.service
+        state: started
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Restart node_exporter
+      ansible.builtin.systemd:
+        name: node_exporter
+        state: restarted
+        daemon_reload: true

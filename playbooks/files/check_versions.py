@@ -24,6 +24,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import date, datetime, timezone
 
@@ -118,6 +119,24 @@ def running_proxmox_prom():
     )
     res = d["data"]["result"]
     return res[0]["metric"].get("version") if res else None
+
+
+def running_app_version_prom(service):
+    """Read a host-published version metric back from Prometheus.
+
+    Used for apps whose port is not reachable from the Prometheus host
+    (vaultwarden, n8n, docmost); their host emits homelab_app_running_version
+    via node_exporter's textfile collector (see app_version_emitter.yml).
+    """
+    query = urllib.parse.quote(f'homelab_app_running_version{{service="{service}"}}')
+    d = http_json(
+        f"https://prometheus.example.com:9090/api/v1/query?query={query}"
+    )
+    res = d["data"]["result"]
+    if not res:
+        return None
+    version = res[0]["metric"].get("version")
+    return version if version and version != "unknown" else None
 
 
 # --- Reference (latest version) sources ---------------------------------------
@@ -222,6 +241,11 @@ SERVICES = [
     ("prometheus",  "prometheus",  running_prometheus,    lambda v: eol_lookup("prometheus", v)),
     ("pihole",      "pihole",      running_pihole,        lambda v: github_lookup("pi-hole/pi-hole", v)),
     ("stepca",      "stepca",      running_stepca,        lambda v: github_lookup("smallstep/certificates", v, tag_strip_prefix="v")),
+    # Apps unreachable from the Prometheus host: running version published by
+    # their own host via node_exporter textfile (see app_version_emitter.yml).
+    ("vaultwarden", "vaultwarden", lambda: running_app_version_prom("vaultwarden"), lambda v: github_lookup("dani-garcia/vaultwarden", v)),
+    ("n8n",         "n8n",         lambda: running_app_version_prom("n8n"),         lambda v: github_lookup("n8n-io/n8n", v, tag_strip_prefix="n8n@")),
+    ("docmost",     "docmost",     lambda: running_app_version_prom("docmost"),     lambda v: github_lookup("docmost/docmost", v, tag_strip_prefix="v")),
 ]
 
 
