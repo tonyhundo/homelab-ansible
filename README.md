@@ -4,10 +4,14 @@ Declarative configuration management for a self-hosted [Proxmox](https://www.pro
 base OS hardening, secrets management, full-stack observability, an internal PKI, and one-command
 service deployments. Every play is idempotent and FQCN-clean.
 
+**Part of a two-repo homelab Infrastructure-as-Code setup** — companion to
+**[homelab-terraform](https://github.com/tonyhundo/homelab-terraform)** (Proxmox provisioning).
+Terraform stands each host up; **this repo (Ansible)** configures it.
+
 > **Note on sanitization.** This is a public mirror of a private operations repo. The real domain and
 > addresses have been replaced with documentation placeholders — `example.com`, `192.0.2.0/24` and
 > `198.51.100.0/24` (RFC 5737), and the admin user generalized to `admin`. **No secrets have ever been
-> committed:** every credential is fetched at runtime from HashiCorp Vault (see [Secrets](#secrets-vault)).
+> committed:** every credential is fetched at runtime from HashiCorp Vault (see [Highlights](#highlights)).
 
 ---
 
@@ -17,7 +21,7 @@ Provisioning and configuration are split across two repositories:
 
 | Layer | Tool | Responsibility |
 | --- | --- | --- |
-| **Provision** | Terraform *(companion repo)* | Clone VMs / create LXC containers on Proxmox, assign IPs, inject SSH keys |
+| **Provision** | [Terraform](https://github.com/tonyhundo/homelab-terraform) *(companion repo)* | Clone VMs / create LXC containers on Proxmox, assign IPs, inject SSH keys |
 | **Configure** | **Ansible** *(this repo)* | Harden the OS, manage users, deploy services, wire up monitoring & TLS |
 
 ```
